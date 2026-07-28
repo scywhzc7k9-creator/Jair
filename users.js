@@ -18,8 +18,8 @@
    ========================================================================== */
 
 const USERS = [
-  { user: "profesor", pass: "profe2026", name: "Profesor(a)" },
-  { user: "alumno01", pass: "qah38", name: "Alumno 01" },
+  { user: "profesor_01", pass: "profe2026", name: "Profesor Jair" },
+  { user: "profesor_02", pass: "TAS2026", name: "Profesor Valset" },
   { user: "alumno02", pass: "dct79", name: "Alumno 02" },
   { user: "alumno03", pass: "cka37", name: "Alumno 03" },
   { user: "alumno04", pass: "gpo93", name: "Alumno 04" },
