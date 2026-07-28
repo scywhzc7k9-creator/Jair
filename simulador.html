@@ -1,0 +1,3410 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<script>
+/* Guard de sesión: si no hay una sesión válida, regresa al login */
+(function(){
+  try{
+    var auth = JSON.parse(localStorage.getItem('mtg_auth') || 'null');
+    if(!auth || !auth.user){ window.location.replace('index.html'); }
+  }catch(e){ window.location.replace('index.html'); }
+})();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Máquina del Tiempo Gramatical</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+  :root{
+    --bg: #0b1220;
+    --panel: #121b2e;
+    --panel-2: #17233a;
+    --line: rgba(237,239,245,0.10);
+    --text: #edeff5;
+    --text-dim: #9aa5bd;
+
+    --era: #3fbfad;
+    --era-dim: rgba(63,191,173,0.15);
+    --era-glow: rgba(63,191,173,0.35);
+
+    --ok: #5fd07a;
+    --bad: #ef6a6a;
+    --exam: #e0a63f;
+  }
+
+  *{box-sizing:border-box; margin:0; padding:0;}
+
+  body{
+    background: var(--bg);
+    color:var(--text);
+    font-family:'Inter', sans-serif;
+    min-height:100vh;
+    padding: 20px 16px 60px;
+  }
+
+  .wrap{ max-width: 900px; margin: 0 auto; }
+
+  /* ---------- HEADER ---------- */
+  header{ margin-bottom: 20px; }
+  .session-badge{
+    display:flex; align-items:center; justify-content:flex-end; gap:10px;
+    margin-bottom: 10px; font-size:12.5px; color: var(--text-dim);
+  }
+  .session-badge button{
+    background: var(--panel); border:1px solid var(--line); color: var(--text-dim);
+    font-family:'Inter', sans-serif; font-size:11.5px; padding:5px 10px; border-radius:8px; cursor:pointer;
+  }
+  .session-badge button:hover{ border-color: var(--era); color: var(--text); }
+
+  .eyebrow{
+    font-family:'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+  h1{
+    font-family:'Space Grotesk', sans-serif;
+    font-size: clamp(24px, 5vw, 32px);
+    font-weight: 700;
+    margin: 4px 0 6px;
+    letter-spacing: -0.5px;
+  }
+  header p{ color: var(--text-dim); font-size: 13.5px; max-width: 560px; }
+
+  /* ---------- EXAM CTA ---------- */
+  .exam-cta{
+    display:flex; align-items:center; justify-content:space-between; gap:14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px 18px;
+    margin: 16px 0;
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+  }
+  .exam-cta:hover{ border-color: var(--era); }
+  .exam-cta .left .tag{ font-family:'JetBrains Mono', monospace; font-size:10px; color: var(--era); letter-spacing:1px; text-transform:uppercase; transition: color 0.8s ease;}
+  .exam-cta .left h3{ font-family:'Space Grotesk', sans-serif; font-size:16.5px; margin-top:4px;}
+  .exam-cta .left p{ font-size:12.5px; color:var(--text-dim); margin-top:2px;}
+  .exam-cta .arrow{ font-family:'Space Grotesk', sans-serif; font-weight:700; color: var(--era); font-size: 20px; flex-shrink:0; transition: color 0.8s ease;}
+
+  /* ---------- DIAL / ERA SWITCH ---------- */
+  .dial-panel{
+    margin: 0 0 4px;
+  }
+  .dial-track{
+    display:flex; align-items:center; justify-content:center; gap: 0;
+    position:relative;
+    padding: 4px;
+    background: var(--panel);
+    border-radius: 12px;
+    border: 1px solid var(--line);
+  }
+  .era-btn{
+    flex:1;
+    border:none;
+    background: transparent;
+    color: var(--text-dim);
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:600;
+    font-size: 13px;
+    padding: 10px 8px;
+    border-radius: 9px;
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    transition: color 0.3s ease;
+    position: relative;
+    z-index: 2;
+  }
+  .era-btn.active{ color:#0b1220; }
+  .dial-highlight{
+    position:absolute;
+    top:4px; bottom:4px; left:4px;
+    width: calc(20% - 4px);
+    background: var(--era);
+    border-radius: 7px;
+    transition: transform 0.3s ease, background 0.5s ease;
+    z-index:1;
+  }
+
+  /* ---------- CARD GRID (shared: tense-card + vocab-card) ---------- */
+  .tense-grid, .vocab-grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .tense-card, .vocab-card{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px;
+    text-align:left;
+    color: var(--text);
+    transition: border-color 0.2s ease;
+    position:relative;
+  }
+  .tense-card:hover, .vocab-card:hover{ border-color: var(--era); }
+  .tense-card .tag, .vocab-card .tag{
+    font-family:'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--era);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: color 0.8s ease;
+  }
+  .tense-card h3, .vocab-card h3{
+    font-family:'Space Grotesk', sans-serif;
+    font-size: 16.5px;
+    margin: 5px 0 5px;
+  }
+  .tense-card p, .vocab-card p{ font-size: 12.5px; color: var(--text-dim); line-height:1.4; margin-bottom: 12px;}
+  .tense-card .progress-dot{
+    position:absolute; top:16px; right:16px;
+    width:8px; height:8px; border-radius:50%;
+    background: rgba(237,239,245,0.15);
+  }
+  .tense-card .progress-dot.done{ background: var(--ok); }
+
+  .card-actions{ display:flex; gap:8px; }
+  .card-actions button{
+    flex:1; font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:12.5px;
+    padding: 9px 8px; border-radius:9px; cursor:pointer; border:1px solid var(--line);
+  }
+  .btn-secondary{ background: var(--panel-2); color: var(--text); }
+  .btn-secondary:hover{ border-color: var(--era); }
+  .btn-primary{ background: var(--era); color:#0b1220; border:none !important; transition: background 0.8s ease;}
+
+  /* ---------- TOP TAB SWITCH (Gramática / Vocabulario) ---------- */
+  .top-tab-switch{
+    display:flex; gap:8px; margin-bottom: 18px;
+  }
+  .top-tab-btn{
+    flex:1; background: var(--panel); border:1px solid var(--line); color: var(--text-dim);
+    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14px;
+    padding: 11px 10px; border-radius: 12px; cursor:pointer;
+  }
+  .top-tab-btn.active{ background: var(--text); color: var(--bg); border-color: var(--text); }
+
+  /* ---------- VOCAB HOME ---------- */
+  .level-switch{
+    display:flex; gap:8px; margin-bottom: 18px;
+  }
+  .level-btn{
+    flex:1; background: var(--panel); border:1px solid var(--line); color: var(--text-dim);
+    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13.5px;
+    padding: 11px 10px; border-radius: 12px; cursor:pointer;
+  }
+  .level-btn.active{ background: var(--era); color:#0b1220; border-color: var(--era); transition: background 0.8s ease, border-color 0.8s ease; }
+
+  /* ---------- VOCAB WORD LIST ---------- */
+  .word-group-title{
+    font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:1.5px; text-transform:uppercase;
+    color: var(--era); margin: 20px 0 10px; transition: color 0.8s ease;
+  }
+  .word-group-title:first-child{ margin-top: 4px; }
+  .word-row{
+    display:flex; align-items:center; gap:12px;
+    background: var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding: 12px 14px; margin-bottom: 8px;
+  }
+  .speak-btn{
+    flex-shrink:0; width:38px; height:38px; border-radius:50%;
+    background: var(--panel-2); border:1px solid var(--line); color: var(--era);
+    font-size:16px; cursor:pointer; transition: border-color 0.8s ease, color 0.8s ease;
+  }
+  .speak-btn:hover{ border-color: var(--era); }
+  .word-row .word-info{ flex:1; min-width:0; }
+  .word-row .en-word{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:15px; }
+  .word-row .pos-tag{
+    font-family:'JetBrains Mono', monospace; font-size:10px; color: var(--text-dim);
+    text-transform:uppercase; margin-left:6px;
+  }
+  .word-row .es-word{ font-size:13px; color: var(--text-dim); margin-top:2px; }
+
+  /* ---------- EXPLANATION VIEW ---------- */
+  .guide-header{ margin-bottom: 8px; }
+  .guide-header .tag{
+    font-family:'JetBrains Mono', monospace; font-size:10.5px; letter-spacing:1.5px;
+    text-transform:uppercase; color: var(--era); transition: color 0.8s ease;
+  }
+  .guide-header h2{ font-family:'Space Grotesk', sans-serif; font-size:24px; margin:6px 0 4px; }
+  .guide-header .es-name{ font-size:14px; color: var(--text-dim); }
+
+  .guide-section{
+    background: var(--panel); border:1px solid var(--line); border-radius:16px;
+    padding: 18px 20px; margin-top: 14px;
+  }
+  .guide-section h3{
+    font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:1.5px;
+    text-transform:uppercase; color: var(--text-dim); margin-bottom: 12px;
+  }
+  .structure-row{
+    display:grid; grid-template-columns: 90px 1fr; gap: 10px 14px; align-items:start;
+    padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px;
+  }
+  .structure-row:last-child{ border-bottom:none; }
+  .structure-row .s-label{
+    font-family:'JetBrains Mono', monospace; font-size:11px; color: var(--era);
+    letter-spacing:1px; text-transform:uppercase; padding-top:3px; transition: color 0.8s ease;
+  }
+  .structure-row .s-formula{ font-family:'Space Grotesk', sans-serif; font-weight:600; }
+
+  .structure-block{
+    padding: 14px 0; border-bottom: 1px solid var(--line);
+  }
+  .structure-block:last-child{ border-bottom:none; }
+  .structure-block .s-label{
+    font-family:'JetBrains Mono', monospace; font-size:11px; color: var(--era);
+    letter-spacing:1px; text-transform:uppercase; transition: color 0.8s ease;
+  }
+  .structure-block .s-formula{
+    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:15.5px; margin-top:4px;
+  }
+  .structure-block .s-note{
+    font-size: 13px; color: var(--text-dim); line-height:1.55; margin-top: 8px;
+  }
+  .structure-block .s-example{
+    margin-top: 10px; padding: 10px 12px; background: var(--panel-2); border-radius: 10px;
+  }
+  .structure-block .s-example .en{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size: 14px; }
+  .structure-block .s-example .es{ color: var(--text-dim); font-size: 12.5px; margin-top: 2px; }
+
+  .modals-table{ width:100%; border-collapse: collapse; font-size: 13px; }
+  .modals-table th{
+    font-family:'JetBrains Mono', monospace; font-size:10.5px; letter-spacing:1px; text-transform:uppercase;
+    color: var(--text-dim); text-align:left; padding: 8px; border-bottom:1px solid var(--line);
+  }
+  .modals-table td{ padding: 10px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  .modals-table td.modal-name{ font-family:'Space Grotesk', sans-serif; font-weight:700; color: var(--era); transition: color 0.8s ease; white-space:nowrap;}
+  .modals-table td .m-en{ font-weight:600; }
+  .modals-table td .m-es{ color: var(--text-dim); font-size:12px; margin-top:2px; }
+
+  .example-pair{ margin: 10px 0; padding: 12px 14px; background: var(--panel-2); border-radius: 12px; }
+  .example-pair .en{ font-family:'Space Grotesk', sans-serif; font-weight:600; font-size: 15px; }
+  .example-pair .es{ color: var(--text-dim); font-size: 13px; margin-top: 3px; }
+
+  .signal-chips{ display:flex; flex-wrap:wrap; gap:8px; margin-top: 4px; }
+  .signal-chip{
+    background: var(--panel-2); border:1px solid var(--line); padding: 5px 12px;
+    border-radius: 999px; font-family:'JetBrains Mono', monospace; font-size: 11.5px; color: var(--era);
+    transition: color 0.8s ease;
+  }
+
+  .guide-cta{
+    display:flex; justify-content:flex-end; margin-top: 20px;
+  }
+
+  /* ---------- MODULE (practice / exam containers) ---------- */
+  .module{ display:none; }
+  .module.active{ display:block; }
+
+  .back-btn{
+    background:none; border:none; color: var(--text-dim);
+    font-family:'JetBrains Mono', monospace; font-size:12.5px;
+    cursor:pointer; display:flex; align-items:center; gap:6px;
+    margin-bottom: 16px;
+  }
+  .back-btn:hover{ color: var(--text); }
+
+  .briefing{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--era);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 18px;
+    transition: border-color 0.8s ease;
+  }
+  .briefing h2{
+    font-family:'Space Grotesk', sans-serif;
+    font-size: 20px; margin-bottom: 4px;
+  }
+  .briefing .rule-toggle{
+    background:none; border:1px solid var(--line); color: var(--text-dim);
+    font-family:'JetBrains Mono', monospace; font-size: 11.5px;
+    padding: 6px 12px; border-radius: 999px; cursor:pointer; margin-top:8px;
+  }
+  .briefing .rule-toggle:hover{ border-color: var(--era); color:var(--text); }
+  .rule-body{ display:none; margin-top: 12px; font-size: 13.5px; color: var(--text-dim); line-height:1.6; }
+  .rule-body.show{ display:block; }
+  .rule-body table{ width:100%; border-collapse: collapse; margin-top:10px; font-size:13px;}
+  .rule-body td, .rule-body th{ padding:6px 8px; border-bottom:1px solid var(--line); text-align:left;}
+  .rule-body th{ color: var(--text); font-family:'JetBrains Mono', monospace; font-size:11px; text-transform:uppercase; letter-spacing:1px;}
+
+  /* gauges */
+  .gauge-row{ display:flex; align-items:center; gap:14px; margin-bottom: 10px; }
+  .gauge-track{
+    flex:1; height:8px; background: var(--panel-2); border-radius: 999px; overflow:hidden; border:1px solid var(--line);
+  }
+  .gauge-fill{ height:100%; width:0%; background: var(--era); transition: width 0.4s ease, background 0.8s ease; }
+  .gauge-label{ font-family:'JetBrains Mono', monospace; font-size: 12px; color: var(--text-dim); white-space:nowrap; }
+
+  .timer-row{ display:flex; align-items:center; gap:14px; margin-bottom: 18px; }
+  .timer-track{ flex:1; height:6px; background: var(--panel-2); border-radius:999px; overflow:hidden; border:1px solid var(--line);}
+  .timer-fill{ height:100%; width:100%; background: var(--exam); transition: width 1s linear, background 0.3s ease; }
+  .timer-label{ font-family:'JetBrains Mono', monospace; font-size:12px; color: var(--exam); white-space:nowrap; min-width:34px; text-align:right;}
+
+  .console{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 24px;
+  }
+  .q-index{
+    font-family:'JetBrains Mono', monospace; font-size: 11.5px; color: var(--era);
+    letter-spacing:1.5px; text-transform:uppercase; margin-bottom:10px; transition: color 0.8s ease;
+  }
+  .q-prompt{
+    font-family:'Space Grotesk', sans-serif;
+    font-size: 21px; font-weight:600; line-height:1.4; margin-bottom: 20px;
+  }
+  .q-prompt .blank{
+    display:inline-block; min-width: 70px; border-bottom: 2px solid var(--era);
+    text-align:center; color: var(--era); transition: color 0.8s ease, border-color 0.8s ease;
+  }
+
+  .options{ display:grid; gap:10px; }
+  .opt-btn{
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    padding: 13px 16px;
+    border-radius: 12px;
+    font-size: 15px;
+    text-align:left;
+    cursor:pointer;
+    font-family:'Inter', sans-serif;
+    transition: border-color 0.2s ease, background 0.2s ease;
+  }
+  .opt-btn:hover:not(:disabled){ border-color: var(--era); }
+  .opt-btn:focus-visible{ outline:2px solid var(--era); outline-offset:2px; }
+  .opt-btn.correct{ border-color: var(--ok); background: rgba(95,208,122,0.12); }
+  .opt-btn.incorrect{ border-color: var(--bad); background: rgba(239,106,106,0.12); }
+  .opt-btn:disabled{ cursor:default; opacity:0.75; }
+
+  .fill-row{ display:flex; gap:10px; }
+  .fill-row input{
+    flex:1; background: var(--panel-2); border:1px solid var(--line); color:var(--text);
+    padding: 13px 16px; border-radius:12px; font-size:15px; font-family:'Inter', sans-serif;
+  }
+  .fill-row input:focus{ outline:none; border-color: var(--era); }
+  .fill-row button{
+    background: var(--era); border:none; color:#0b1220; font-weight:600;
+    padding: 0 22px; border-radius:12px; cursor:pointer; font-family:'Space Grotesk', sans-serif;
+    transition: background 0.8s ease;
+  }
+  .fill-row button:disabled{ opacity:0.5; cursor:default; }
+
+  .feedback{
+    margin-top: 16px; padding: 14px 16px; border-radius: 12px;
+    font-size: 14px; line-height:1.5; display:none;
+  }
+  .feedback.show{ display:block; }
+  .feedback.ok{ background: rgba(95,208,122,0.12); border:1px solid rgba(95,208,122,0.4); color:#c8f5d3; }
+  .feedback.bad{ background: rgba(239,106,106,0.12); border:1px solid rgba(239,106,106,0.4); color:#ffd6d6; }
+  .feedback .src-tag{ display:block; font-family:'JetBrains Mono', monospace; font-size:10.5px; color:var(--text-dim); margin-top:6px; letter-spacing:0.5px; text-transform:uppercase;}
+
+  .console-footer{ display:flex; justify-content:flex-end; margin-top: 18px; }
+  .next-btn{
+    background: var(--era); color:#0b1220; border:none; font-weight:700;
+    font-family:'Space Grotesk', sans-serif; padding: 12px 24px; border-radius: 12px;
+    cursor:pointer; transition: background 0.8s ease, opacity 0.2s ease;
+    opacity:0; pointer-events:none;
+  }
+  .next-btn.show{ opacity:1; pointer-events:auto; }
+
+  /* summary */
+  .summary{ text-align:center; padding: 30px 10px; }
+  .summary .big-score{
+    font-family:'JetBrains Mono', monospace; font-size: 52px; font-weight:700; color: var(--era);
+    transition: color 0.8s ease;
+  }
+  .summary p{ color: var(--text-dim); margin: 8px 0 22px; }
+  .summary .actions{ display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+  .ghost-btn{
+    background:none; border:1px solid var(--line); color: var(--text);
+    padding: 11px 20px; border-radius: 12px; cursor:pointer; font-family:'Space Grotesk', sans-serif; font-weight:600;
+  }
+  .ghost-btn:hover{ border-color: var(--era); }
+  .solid-btn{
+    background: var(--era); border:none; color:#0b1220; padding: 11px 20px; border-radius:12px;
+    cursor:pointer; font-family:'Space Grotesk', sans-serif; font-weight:700; transition: background 0.8s ease;
+  }
+
+  /* ---------- EXAM SETUP ---------- */
+  .setup-panel{
+    background: var(--panel); border:1px solid var(--line); border-radius:18px; padding:26px;
+  }
+  .setup-panel h2{ font-family:'Space Grotesk', sans-serif; font-size:22px; margin-bottom:6px;}
+  .setup-panel > p{ color:var(--text-dim); font-size:13.5px; margin-bottom:20px;}
+  .field-label{ font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-dim); margin-bottom:8px; display:block;}
+  .name-input{
+    width:100%; background: var(--panel-2); border:1px solid var(--line); color:var(--text);
+    padding: 13px 16px; border-radius:12px; font-size:15px; font-family:'Inter', sans-serif; margin-bottom:22px;
+  }
+  .name-input:focus{ outline:none; border-color: var(--exam); }
+  .diff-options{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:24px;}
+  .diff-btn{
+    background: var(--panel-2); border:1px solid var(--line); border-radius:14px; padding:16px;
+    text-align:left; cursor:pointer; color:var(--text);
+  }
+  .diff-btn b{ font-family:'Space Grotesk', sans-serif; display:block; font-size:15.5px; margin-bottom:4px;}
+  .diff-btn span{ font-size:12.5px; color:var(--text-dim); line-height:1.4; display:block;}
+  .diff-btn.selected{ border-color: var(--exam); background: rgba(224,166,63,0.08); }
+  .start-exam-btn{
+    width:100%; background: var(--exam); border:none; color:#0b1220; font-weight:700;
+    font-family:'Space Grotesk', sans-serif; padding: 14px; border-radius:12px; cursor:pointer; font-size:15px;
+  }
+  .start-exam-btn:disabled{ opacity:0.5; cursor:default; }
+
+  /* ---------- EXAM RESULTS ---------- */
+  .breakdown{ text-align:left; margin: 22px 0; }
+  .breakdown table{ width:100%; border-collapse:collapse; font-size:13.5px;}
+  .breakdown th{ font-family:'JetBrains Mono', monospace; font-size:10.5px; letter-spacing:1px; text-transform:uppercase; color:var(--text-dim); text-align:left; padding:8px; border-bottom:1px solid var(--line);}
+  .breakdown td{ padding:8px; border-bottom:1px solid var(--line); }
+  .breakdown td.score-cell{ font-family:'JetBrains Mono', monospace; text-align:right; }
+
+  /* ---------- VIRTUAL ASSISTANT ---------- */
+  .assistant-fab{
+    position: fixed; right: 18px; bottom: 18px; z-index: 60;
+    width: 56px; height: 56px; border-radius: 50%;
+    background: var(--era); border: none; font-size: 22px; cursor: pointer;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+    transition: background 0.8s ease, transform 0.2s ease;
+  }
+  .assistant-fab:hover{ transform: scale(1.06); }
+
+  .assistant-overlay{
+    position: fixed; inset: 0; z-index: 70;
+    background: rgba(5,8,14,0.72);
+    display:flex; align-items:center; justify-content:center;
+    padding: 16px;
+  }
+  .assistant-panel{
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    width: 100%; max-width: 480px; max-height: 88vh;
+    overflow-y: auto;
+    padding: 20px;
+  }
+  .assistant-header{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:14px; }
+  .assistant-header h2{ font-family:'Space Grotesk', sans-serif; font-size:18px; margin-top:3px; }
+  .assistant-header .tag{ font-family:'JetBrains Mono', monospace; font-size:10px; letter-spacing:1px; text-transform:uppercase; }
+  .assistant-close{
+    background: var(--panel); border:1px solid var(--line); color: var(--text);
+    width:32px; height:32px; border-radius:50%; cursor:pointer; font-size:14px; flex-shrink:0;
+  }
+  .assistant-hint{ font-size:12.5px; color:var(--text-dim); line-height:1.5; margin-bottom:14px; }
+
+  .topic-chip-grid{ display:flex; flex-wrap:wrap; gap:8px; }
+  .topic-chip{
+    background: var(--panel); border:1px solid var(--line); color: var(--text);
+    padding: 9px 14px; border-radius: 999px; font-size:13px; cursor:pointer;
+    font-family:'Inter', sans-serif;
+  }
+  .topic-chip.selected{ background: var(--era); color:#0b1220; border-color: var(--era); transition: background 0.8s ease; }
+
+  .assistant-topic-banner{
+    font-family:'JetBrains Mono', monospace; font-size:11px; color: var(--text-dim);
+    text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px;
+  }
+  .assistant-messages{
+    display:flex; flex-direction:column; gap:10px;
+    max-height: 44vh; overflow-y:auto; padding: 4px 2px; margin-bottom: 12px;
+  }
+  .msg{ max-width: 85%; padding: 10px 13px; border-radius: 13px; font-size: 13.5px; line-height:1.45; }
+  .msg.assistant{ background: var(--panel); align-self:flex-start; border-bottom-left-radius:3px; }
+  .msg.user{ background: var(--era); color:#0b1220; align-self:flex-end; border-bottom-right-radius:3px; transition: background 0.8s ease;}
+  .msg.system-note{ background:none; color: var(--text-dim); align-self:center; font-size:11.5px; font-style:italic; text-align:center; max-width:100%; }
+
+  .assistant-input-row{ display:flex; gap:8px; align-items:center; }
+  .mic-btn{
+    flex-shrink:0; width:44px; height:44px; border-radius:50%;
+    background: var(--panel-2); border:1px solid var(--line); color: var(--era);
+    font-size:18px; cursor:pointer; transition: background 0.2s ease, color 0.8s ease;
+  }
+  .mic-btn.recording{ background: var(--bad); color:#fff; animation: pulse-mic 1.1s infinite; }
+  @keyframes pulse-mic{ 0%{ box-shadow: 0 0 0 0 rgba(239,106,106,0.5);} 70%{ box-shadow: 0 0 0 10px rgba(239,106,106,0);} 100%{ box-shadow: 0 0 0 0 rgba(239,106,106,0);} }
+  .assistant-input-row input{
+    flex:1; background: var(--panel-2); border:1px solid var(--line); color:var(--text);
+    padding: 11px 14px; border-radius:12px; font-size:13.5px; font-family:'Inter', sans-serif;
+  }
+  .assistant-input-row input:focus{ outline:none; border-color: var(--era); }
+  .send-btn{
+    flex-shrink:0; background: var(--era); border:none; color:#0b1220; font-weight:600;
+    padding: 0 16px; height:44px; border-radius:12px; cursor:pointer; font-family:'Space Grotesk', sans-serif;
+    transition: background 0.8s ease;
+  }
+  .assistant-status{ font-size:11.5px; color: var(--text-dim); min-height:16px; margin-top:6px; text-align:center; }
+
+  .report-section{ margin-bottom:16px; }
+  .report-section h4{
+    font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:1px; text-transform:uppercase;
+    color: var(--text-dim); margin-bottom:8px;
+  }
+  .report-section ul{ padding-left:18px; font-size:13px; line-height:1.6; }
+  .report-section p{ font-size:13px; line-height:1.6; color: var(--text-dim); }
+  .report-chip-list{ display:flex; flex-wrap:wrap; gap:6px; }
+  .report-chip{ background: var(--panel-2); border:1px solid var(--line); padding:4px 10px; border-radius:999px; font-size:12px; }
+
+  footer{ text-align:center; margin-top: 40px; color: var(--text-dim); font-size:12px; font-family:'JetBrains Mono', monospace;}
+
+  @media (prefers-reduced-motion: reduce){
+    *{ transition: none !important; }
+  }
+
+  @media (max-width: 520px){
+    .dial-track{ flex-direction:column; }
+    .dial-highlight{ display:none; }
+    .era-btn.active{ background: var(--era); color:#0b1220; border-radius: 12px; }
+    .diff-options{ grid-template-columns:1fr; }
+    .exam-cta{ flex-direction:column; align-items:flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <div class="session-badge">
+    <span id="sessionName">👤 Alumno</span>
+    <button onclick="logoutSession()">Cerrar sesión</button>
+  </div>
+
+  <header>
+    <div class="eyebrow" id="eyebrow">inglés · prepa</div>
+    <h1>Máquina del Tiempo Gramatical</h1>
+    <p>Gramática y vocabulario en un solo lugar: explicaciones claras y un examen para cada tema.</p>
+  </header>
+
+  <!-- HOME -->
+  <div id="home">
+
+    <!-- TOP TAB SWITCH -->
+    <div class="top-tab-switch">
+      <button class="top-tab-btn active" id="topTabGramatica" onclick="setTopTab('gramatica')">Gramática</button>
+      <button class="top-tab-btn" id="topTabVocabulario" onclick="setTopTab('vocabulario')">Vocabulario</button>
+    </div>
+
+    <div id="grammarHome">
+
+    <!-- DIAL / ERA SELECTOR -->
+    <div class="dial-panel">
+      <div class="dial-track">
+        <div class="dial-highlight" id="dialHighlight"></div>
+        <button class="era-btn active" data-era="pasado" onclick="setEra('pasado')">Pasado</button>
+        <button class="era-btn" data-era="presente" onclick="setEra('presente')">Presente</button>
+        <button class="era-btn" data-era="futuro" onclick="setEra('futuro')">Futuro</button>
+        <button class="era-btn" data-era="modales" onclick="setEra('modales')">Modales</button>
+        <button class="era-btn" data-era="extra" onclick="setEra('extra')">Extra</button>
+      </div>
+    </div>
+
+    <div class="tense-grid" id="tenseGrid"></div>
+
+    <!-- EXAM CTA -->
+    <div class="exam-cta" onclick="openExamSetup()">
+      <div class="left">
+        <div class="tag">Examen general · contra el reloj</div>
+        <h3>Repaso mezclado de los 17 temas de gramática</h3>
+        <p>Elige tu nivel, escribe tu nombre y descarga tu resultado al terminar.</p>
+      </div>
+      <div class="arrow">→</div>
+    </div>
+    </div>
+
+    <!-- VOCAB HOME -->
+    <div id="vocabHome" style="display:none;">
+      <div class="level-switch">
+        <button class="level-btn active" id="levelPrimero" onclick="setVocabLevel('primero')">Primer año</button>
+        <button class="level-btn" id="levelSegundo" onclick="setVocabLevel('segundo')">Segundo año</button>
+      </div>
+
+      <div class="vocab-grid" id="vocabGrid"></div>
+
+      <!-- VOCAB GENERAL EXAM CTA -->
+      <div class="exam-cta" onclick="startVocabExamAll()">
+        <div class="left">
+          <div class="tag" id="vocabExamAllTag">Examen general de vocabulario</div>
+          <h3>Repaso mezclado de todas las unidades</h3>
+          <p>30 preguntas al azar de todo el vocabulario de este año.</p>
+        </div>
+        <div class="arrow">→</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODULE: practice screen -->
+  <div class="module" id="moduleView">
+    <button class="back-btn" onclick="goHome()">← volver al panel</button>
+
+    <div class="briefing">
+      <div class="tag" id="briefTag">TIEMPO VERBAL</div>
+      <h2 id="briefTitle">Título</h2>
+      <button class="rule-toggle" onclick="toggleRule()">Ver la regla</button>
+      <div class="rule-body" id="ruleBody"></div>
+    </div>
+
+    <div class="gauge-row">
+      <span class="gauge-label" id="gaugeLabel">0 / 0</span>
+      <div class="gauge-track"><div class="gauge-fill" id="gaugeFill"></div></div>
+      <span class="gauge-label" id="scoreLabel">✓ 0</span>
+    </div>
+
+    <div class="console" id="consoleView"></div>
+
+    <div class="summary" id="summaryView" style="display:none;">
+      <div class="big-score" id="finalScore">0/0</div>
+      <p id="finalMsg">Resultado</p>
+      <div class="actions">
+        <button class="ghost-btn" onclick="goHome()">Volver al panel</button>
+        <button class="solid-btn" onclick="retryModule()">Reintentar este tiempo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXPLANATION DETAIL -->
+  <div class="module" id="explanationView">
+    <button class="back-btn" onclick="goHome()">← volver al panel</button>
+
+    <div class="guide-header">
+      <div class="tag" id="guideTag">TIEMPO VERBAL</div>
+      <h2 id="guideTitle">Título</h2>
+      <div class="es-name" id="guideEsName">Traducción</div>
+    </div>
+
+    <div class="guide-section">
+      <h3>Estructura</h3>
+      <div id="guideStructure"></div>
+    </div>
+
+    <div class="guide-section">
+      <h3>Ejemplos con traducción</h3>
+      <div id="guideExamples"></div>
+    </div>
+
+    <div class="guide-section" id="guideModalsSection" style="display:none;">
+      <h3>Los 10 verbos modales</h3>
+      <table class="modals-table">
+        <thead><tr><th>Modal</th><th>Uso</th><th>Ejemplo</th></tr></thead>
+        <tbody id="guideModalsBody"></tbody>
+      </table>
+    </div>
+
+    <div class="guide-section">
+      <h3>Palabras clave</h3>
+      <div class="signal-chips" id="guideSignals"></div>
+    </div>
+
+    <div class="guide-cta">
+      <button class="next-btn show" onclick="openModuleFromGuide()">Presentar examen →</button>
+    </div>
+  </div>
+
+  <!-- VOCAB WORD LIST -->
+  <div class="module" id="vocabListView">
+    <button class="back-btn" onclick="goHome()">← volver al vocabulario</button>
+    <div class="guide-header">
+      <div class="tag" id="vocabListTag">UNIDAD</div>
+      <h2 id="vocabListTitle">Título</h2>
+    </div>
+    <div class="briefing" style="margin-bottom:18px;">
+      <button class="rule-toggle" onclick="toggleVocabLegend()">¿Qué significa cada categoría gramatical?</button>
+      <div class="rule-body" id="vocabListLegend"><div id="vocabListLegendBody"></div></div>
+    </div>
+    <div id="vocabListBody"></div>
+  </div>
+
+  <!-- VOCAB EXAM -->
+  <div class="module" id="vocabExamView">
+    <button class="back-btn" onclick="confirmExitVocabExam()">← salir del examen</button>
+    <div class="gauge-row">
+      <span class="gauge-label" id="vocabExamGaugeLabel">0 / 0</span>
+      <div class="gauge-track"><div class="gauge-fill" id="vocabExamGaugeFill" style="background:var(--era)"></div></div>
+      <span class="gauge-label" id="vocabExamScoreLabel">✓ 0</span>
+    </div>
+    <div class="console" id="vocabExamConsoleView"></div>
+  </div>
+
+  <!-- VOCAB EXAM RESULTS -->
+  <div class="module" id="vocabExamResultsView">
+    <div class="summary">
+      <div class="big-score" id="vocabExamFinalScore">0/0</div>
+      <p id="vocabExamFinalMsg">Resultado</p>
+      <div class="breakdown" id="vocabBreakdownWrap" style="display:none;">
+        <table>
+          <thead><tr><th>Unidad</th><th>Aciertos</th></tr></thead>
+          <tbody id="vocabBreakdownBody"></tbody>
+        </table>
+      </div>
+      <div class="actions">
+        <button class="ghost-btn" onclick="goHome()">Volver al vocabulario</button>
+        <button class="solid-btn" onclick="retryVocabExam()">Reintentar examen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXAM SETUP -->
+  <div class="module" id="examSetupView">
+    <button class="back-btn" onclick="goHome()">← volver al panel</button>
+    <div class="setup-panel">
+      <h2>Configura tu examen</h2>
+      <p>Se mezclarán preguntas de los 17 temas de gramática. Al final verás tu puntaje por tema y podrás descargar tu resultado.</p>
+
+      <label class="field-label" for="studentName">Tu nombre</label>
+      <input type="text" id="studentName" class="name-input" placeholder="Escribe tu nombre completo">
+
+      <label class="field-label">Nivel</label>
+      <div class="diff-options">
+        <button class="diff-btn selected" id="diffFacil" onclick="selectDifficulty('facil')">
+          <b>Fácil</b>
+          <span>12 preguntas · solo opción múltiple · 25 seg. cada una</span>
+        </button>
+        <button class="diff-btn" id="diffDificil" onclick="selectDifficulty('dificil')">
+          <b>Difícil</b>
+          <span>18 preguntas · incluye completar espacios · 15 seg. cada una</span>
+        </button>
+      </div>
+
+      <button class="start-exam-btn" onclick="startExam()">Comenzar examen</button>
+    </div>
+  </div>
+
+  <!-- EXAM RUNNING -->
+  <div class="module" id="examView">
+    <button class="back-btn" onclick="confirmExitExam()">← salir del examen</button>
+
+    <div class="gauge-row">
+      <span class="gauge-label" id="examGaugeLabel">0 / 0</span>
+      <div class="gauge-track"><div class="gauge-fill" id="examGaugeFill" style="background:var(--exam)"></div></div>
+      <span class="gauge-label" id="examScoreLabel">✓ 0</span>
+    </div>
+    <div class="timer-row">
+      <span class="timer-label" id="timerLabel">--s</span>
+      <div class="timer-track"><div class="timer-fill" id="timerFill"></div></div>
+    </div>
+
+    <div class="console" id="examConsoleView"></div>
+  </div>
+
+  <!-- EXAM RESULTS -->
+  <div class="module" id="examResultsView">
+    <div class="summary">
+      <div class="big-score" id="examFinalScore" style="color:var(--exam)">0/0</div>
+      <p id="examFinalMsg">Resultado</p>
+      <div class="breakdown">
+        <table>
+          <thead><tr><th>Tiempo verbal</th><th>Aciertos</th></tr></thead>
+          <tbody id="breakdownBody"></tbody>
+        </table>
+      </div>
+      <div class="actions">
+        <button class="ghost-btn" onclick="goHome()">Volver al panel</button>
+        <button class="solid-btn" style="background:var(--exam)" onclick="downloadResult()">Descargar resultado (.txt)</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>simulador de tiempos verbales · práctica sin conexión a servidor</footer>
+</div>
+
+<!-- ASSISTANT FAB -->
+<button class="assistant-fab" id="assistantFab" onclick="openAssistant()" aria-label="Asistente virtual">🎙️</button>
+
+<!-- ASSISTANT OVERLAY -->
+<div class="assistant-overlay" id="assistantOverlay" style="display:none;">
+  <div class="assistant-panel">
+    <div class="assistant-header">
+      <div>
+        <div class="tag" style="color:var(--era)">Asistente virtual</div>
+        <h2>Practica una conversación en inglés</h2>
+      </div>
+      <button class="assistant-close" onclick="closeAssistant()">✕</button>
+    </div>
+
+    <!-- SETUP STAGE -->
+    <div id="assistantSetup" class="assistant-stage">
+      <p class="assistant-hint">Elige el año y un tema (o conversación libre). El asistente adapta el vocabulario y, al final, te da un reporte de errores y puntos a mejorar.</p>
+
+      <div class="level-switch">
+        <button class="level-btn active" id="assistantLevelPrimero" onclick="setAssistantLevel('primero')">Primer año</button>
+        <button class="level-btn" id="assistantLevelSegundo" onclick="setAssistantLevel('segundo')">Segundo año</button>
+      </div>
+
+      <div class="topic-chip-grid" id="assistantTopicGrid"></div>
+
+      <button class="start-exam-btn" id="assistantStartBtn" style="margin-top:16px;" onclick="startAssistantConversation()">Comenzar conversación</button>
+      <p class="assistant-hint" style="margin-top:10px; font-size:11.5px;">Necesita permiso de micrófono. Si tu navegador no lo soporta, puedes escribir tus respuestas.</p>
+    </div>
+
+    <!-- CHAT STAGE -->
+    <div id="assistantChat" class="assistant-stage" style="display:none;">
+      <div class="assistant-topic-banner" id="assistantTopicBanner"></div>
+      <div class="assistant-messages" id="assistantMessages"></div>
+      <div class="assistant-input-row">
+        <button class="mic-btn" id="assistantMicBtn" onclick="toggleRecording()">🎤</button>
+        <input type="text" id="assistantTextInput" placeholder="O escribe tu respuesta en inglés..." autocomplete="off">
+        <button class="send-btn" onclick="sendTypedMessage()">Enviar</button>
+      </div>
+      <div class="assistant-status" id="assistantStatus"></div>
+      <button class="ghost-btn" style="width:100%; margin-top:12px;" onclick="finishAssistantConversation()">Finalizar y ver reporte</button>
+    </div>
+
+    <!-- REPORT STAGE -->
+    <div id="assistantReport" class="assistant-stage" style="display:none;">
+      <div id="assistantReportBody"></div>
+      <div class="actions" style="margin-top:16px;">
+        <button class="ghost-btn" onclick="restartAssistant()">Nueva conversación</button>
+        <button class="solid-btn" onclick="closeAssistant()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============ ERA THEME ============ */
+const ERA_COLORS = {
+  pasado:  { c: '#c97c3d', glow: 'rgba(201,124,61,0.35)', dim: 'rgba(201,124,61,0.15)' },
+  presente:{ c: '#3fbfad', glow: 'rgba(63,191,173,0.35)', dim: 'rgba(63,191,173,0.15)' },
+  futuro:  { c: '#8b7fd6', glow: 'rgba(139,127,214,0.35)', dim: 'rgba(139,127,214,0.15)' },
+  modales: { c: '#d97a9e', glow: 'rgba(217,122,158,0.35)', dim: 'rgba(217,122,158,0.15)' },
+  extra:   { c: '#5fa8d6', glow: 'rgba(95,168,214,0.35)', dim: 'rgba(95,168,214,0.15)' },
+};
+const ERA_INDEX = { pasado:0, presente:1, futuro:2, modales:3, extra:4 };
+const ERA_LABEL = { pasado:'Pasado', presente:'Presente', futuro:'Futuro', modales:'Verbos modales', extra:'Temas extra' };
+
+/* ============ TENSE DATA ============ */
+const TENSES = {
+  tobe_presente: {
+    era: 'presente', tag: 'Verbo to be · presente',
+    title: 'To Be — presente (am / is / are)',
+    summary: 'Identidad, descripciones y estados en el presente.',
+    rule: `
+      <p>El verbo <b>to be</b> cambia según el sujeto:</p>
+      <table>
+        <tr><th>Sujeto</th><th>Forma</th><th>Ejemplo</th></tr>
+        <tr><td>I</td><td>am</td><td>I am a student.</td></tr>
+        <tr><td>You / We / They</td><td>are</td><td>They are happy.</td></tr>
+        <tr><td>He / She / It</td><td>is</td><td>She is tired.</td></tr>
+      </table>
+      <p style="margin-top:8px">Negativo: <b>am not / isn't / aren't</b>. Pregunta: invierte el orden → <b>Is she...? / Are you...?</b></p>
+    `,
+    questions: [
+      {type:'mc', prompt:'I ___ from Mexico.', options:['am','is','are'], answer:'am', explain:'Con "I" siempre usamos "am".'},
+      {type:'mc', prompt:'She ___ a doctor.', options:['am','is','are'], answer:'is', explain:'"She" (tercera persona singular) usa "is".'},
+      {type:'mc', prompt:'They ___ my classmates.', options:['am','is','are'], answer:'are', explain:'Con "they" usamos "are".'},
+      {type:'mc', prompt:'___ you ready?', options:['Am','Is','Are'], answer:'Are', explain:'Con "you" en preguntas usamos "Are".'},
+      {type:'fill', prompt:'We ___ (be) very excited today.', answer:'are', explain:'"We" toma "are".'},
+      {type:'fill', prompt:'This exercise ___ (be, negative, contracted) difficult.', answer:"isn't", explain:'Negativo de "is" contraído: isn\'t.'},
+      {type:'mc', prompt:'It ___ Monday today.', options:['am','is','are'], answer:'is', explain:'"It" usa "is".'},
+      {type:'fill', prompt:'My parents ___ (be) at work right now.', answer:'are', explain:'"My parents" = they → are.'},
+      {type:'mc', prompt:'You and I ___ good friends.', options:['am','is','are'], answer:'are', explain:'Sujeto compuesto (you and I) = we → are.'},
+      {type:'mc', prompt:'___ he your brother?', options:['Am','Is','Are'], answer:'Is', explain:'"He" en preguntas usa "Is".'},
+      {type:'fill', prompt:'I ___ (be, negative) hungry right now.', answer:"am not", explain:'Negativo con "I": am not (no se contrae "amn\'t").'},
+      {type:'mc', prompt:'The books ___ on the table.', options:['is','are','am'], answer:'are', explain:'"The books" es plural → are.'},
+    ]
+  },
+
+  tobe_pasado: {
+    era: 'pasado', tag: 'Verbo to be · pasado',
+    title: 'To Be — pasado (was / were)',
+    summary: 'Describe cómo eran las cosas o dónde estabas.',
+    rule: `
+      <p>El pasado de <b>to be</b> solo tiene dos formas:</p>
+      <table>
+        <tr><th>Sujeto</th><th>Forma</th><th>Ejemplo</th></tr>
+        <tr><td>I / He / She / It</td><td>was</td><td>I was tired.</td></tr>
+        <tr><td>You / We / They</td><td>were</td><td>They were at home.</td></tr>
+      </table>
+      <p style="margin-top:8px">Negativo: <b>wasn't / weren't</b>. Pregunta: <b>Was he...? / Were they...?</b></p>
+    `,
+    questions: [
+      {type:'mc', prompt:'I ___ at school yesterday.', options:['was','were'], answer:'was', explain:'"I" usa "was".'},
+      {type:'mc', prompt:'They ___ very nervous before the exam.', options:['was','were'], answer:'were', explain:'"They" usa "were".'},
+      {type:'mc', prompt:'___ you at the party last night?', options:['Was','Were'], answer:'Were', explain:'"You" usa "were" incluso en preguntas.'},
+      {type:'fill', prompt:'She ___ (be) sick last week.', answer:'was', explain:'"She" toma "was".'},
+      {type:'fill', prompt:'We ___ (be, negative) ready for the test.', answer:"weren't", explain:'Negativo de "were" contraído: weren\'t.'},
+      {type:'mc', prompt:'The movie ___ boring.', options:['was','were'], answer:'was', explain:'"The movie" = it → was.'},
+      {type:'fill', prompt:'My grandparents ___ (be) teachers.', answer:'were', explain:'Sujeto plural → were.'},
+      {type:'mc', prompt:'He ___ not happy with the results.', options:['was','were'], answer:'was', explain:'"He" usa "was".'},
+      {type:'mc', prompt:'___ it cold yesterday?', options:['Was','Were'], answer:'Was', explain:'"It" usa "was".'},
+      {type:'fill', prompt:'I ___ (be) at the doctor\'s office this morning.', answer:'was', explain:'"I" toma "was".'},
+      {type:'mc', prompt:'The children ___ asleep by 9 p.m.', options:['was','were'], answer:'were', explain:'"The children" es plural → were.'},
+    ]
+  },
+
+  pasado_continuo: {
+    era: 'pasado', tag: 'Pasado continuo',
+    title: 'Pasado continuo',
+    summary: 'Una acción en progreso en un momento del pasado.',
+    rule: `
+      <p>Se forma con <b>was / were + verbo-ing</b>. Muestra una acción en progreso, muchas veces interrumpida por otra en pasado simple (<b>while / when</b>).</p>
+      <table>
+        <tr><th>Sujeto</th><th>Forma</th><th>Ejemplo</th></tr>
+        <tr><td>I / He / She / It</td><td>was + -ing</td><td>I was studying.</td></tr>
+        <tr><td>You / We / They</td><td>were + -ing</td><td>They were playing.</td></tr>
+      </table>
+      <p style="margin-top:8px">Ejemplo con interrupción: <b>I was cooking when she arrived.</b></p>
+    `,
+    questions: [
+      {type:'mc', prompt:'I ___ studying when you called.', options:['was','were'], answer:'was', explain:'"I" + was + verbo-ing.'},
+      {type:'mc', prompt:'They ___ playing soccer when it started to rain.', options:['was','were'], answer:'were', explain:'"They" + were + verbo-ing.'},
+      {type:'fill', prompt:'She ___ (sleep) when the phone rang.', answer:'was sleeping', explain:'"She" + was + sleeping.'},
+      {type:'mc', prompt:'While I ___ cooking, the doorbell rang.', options:['was','were'], answer:'was', explain:'"I" toma "was".'},
+      {type:'fill', prompt:'We ___ (watch) TV at 9 p.m. last night.', answer:'were watching', explain:'"We" + were + watching.'},
+      {type:'mc', prompt:'___ you working at 10 a.m. yesterday?', options:['Was','Were'], answer:'Were', explain:'"You" en preguntas usa "were".'},
+      {type:'fill', prompt:'He ___ (drive) when he saw the accident.', answer:'was driving', explain:'"He" + was + driving.'},
+      {type:'mc', prompt:'The kids ___ not listening to the teacher.', options:['was','were'], answer:'were', explain:'"The kids" es plural → were.'},
+    ]
+  },
+
+  presente_simple: {
+    era: 'presente', tag: 'Presente simple',
+    title: 'Presente simple',
+    summary: 'Rutinas, hábitos y hechos generales.',
+    rule: `
+      <p>Se usa para rutinas y hechos generales. El verbo lleva <b>-s / -es</b> con he / she / it:</p>
+      <table>
+        <tr><th>Sujeto</th><th>Forma</th><th>Ejemplo</th></tr>
+        <tr><td>I / You / We / They</td><td>verbo base</td><td>I play soccer.</td></tr>
+        <tr><td>He / She / It</td><td>verbo + s/es</td><td>She plays soccer.</td></tr>
+      </table>
+      <p style="margin-top:8px">Negativo: <b>don't / doesn't</b> + verbo base. Pregunta: <b>Do / Does</b> + sujeto + verbo base.</p>
+    `,
+    questions: [
+      {type:'mc', prompt:'He ___ to school every day.', options:['walk','walks','walking'], answer:'walks', explain:'Tercera persona singular → verbo + s.'},
+      {type:'mc', prompt:'I ___ coffee in the morning.', options:['drink','drinks','drank'], answer:'drink', explain:'Con "I" el verbo va en forma base.'},
+      {type:'mc', prompt:'She ___ not like spicy food.', options:['do','does','is'], answer:'does', explain:'Negativo con "she" usa "does" + verbo base.'},
+      {type:'fill', prompt:'My brother ___ (study) English every night.', answer:'studies', explain:'Verbos terminados en consonante + y → cambian a "ies".'},
+      {type:'mc', prompt:'___ they live in Puebla?', options:['Do','Does','Is'], answer:'Do', explain:'"They" en preguntas usa "Do".'},
+      {type:'fill', prompt:'The store ___ (open) at 9 a.m.', answer:'opens', explain:'"The store" = it → verbo + s.'},
+      {type:'mc', prompt:'We ___ homework on Fridays.', options:['does','do','doesn\'t'], answer:'do', explain:'"We" usa "do" en la forma afirmativa/negativa auxiliar.'},
+      {type:'fill', prompt:'He ___ (not/watch) TV during the week.', answer:"doesn't watch", explain:'Negativo con he/she/it: doesn\'t + verbo base.'},
+      {type:'mc', prompt:'My mom ___ dinner every evening.', options:['cook','cooks','cooking'], answer:'cooks', explain:'"My mom" = she → verbo + s.'},
+      {type:'fill', prompt:'They ___ (not/like) horror movies.', answer:"don't like", explain:'Negativo con they: don\'t + verbo base.'},
+      {type:'mc', prompt:'Does he ___ Spanish?', options:['speak','speaks','spoke'], answer:'speak', explain:'Después de "does", el verbo va en forma base.'},
+    ]
+  },
+
+  presente_continuo: {
+    era: 'presente', tag: 'Presente continuo',
+    title: 'Presente continuo',
+    summary: 'Acciones que están pasando justo ahora.',
+    rule: `
+      <p>Se forma con <b>to be (am/is/are) + verbo-ing</b>. Describe acciones en progreso.</p>
+      <table>
+        <tr><th>Sujeto</th><th>Forma</th><th>Ejemplo</th></tr>
+        <tr><td>I</td><td>am + -ing</td><td>I am studying.</td></tr>
+        <tr><td>He / She / It</td><td>is + -ing</td><td>He is running.</td></tr>
+        <tr><td>You / We / They</td><td>are + -ing</td><td>They are working.</td></tr>
+      </table>
+    `,
+    questions: [
+      {type:'mc', prompt:'I ___ studying for the test right now.', options:['am','is','are'], answer:'am', explain:'"I" + am + verbo-ing.'},
+      {type:'mc', prompt:'She ___ talking on the phone at the moment.', options:['am','is','are'], answer:'is', explain:'"She" + is + verbo-ing.'},
+      {type:'fill', prompt:'We ___ (play) soccer right now.', answer:'are playing', explain:'"We" + are + playing.'},
+      {type:'mc', prompt:'They ___ watching a movie now.', options:['am','is','are'], answer:'are', explain:'"They" + are + verbo-ing.'},
+      {type:'fill', prompt:'He ___ (write) an email at this moment.', answer:'is writing', explain:'"He" + is + writing.'},
+      {type:'mc', prompt:'___ you listening to me?', options:['Am','Is','Are'], answer:'Are', explain:'"You" en preguntas usa "Are".'},
+      {type:'fill', prompt:'I ___ (not/sleep) right now, I am reading.', answer:"am not sleeping", explain:'Negativo: am not + verbo-ing.'},
+      {type:'mc', prompt:'It ___ raining outside right now.', options:['am','is','are'], answer:'is', explain:'"It" + is + verbo-ing.'},
+      {type:'fill', prompt:'My friends ___ (wait) for me outside.', answer:'are waiting', explain:'"My friends" = they → are + waiting.'},
+    ]
+  },
+
+  presente_perfecto: {
+    era: 'presente', tag: 'Presente perfecto',
+    title: 'Presente perfecto',
+    summary: 'Experiencias y acciones pasadas conectadas con el presente.',
+    rule: `
+      <p>Se forma con <b>have / has + participio pasado</b>. Conecta el pasado con el presente: experiencias, resultados actuales, o acciones que continúan.</p>
+      <table>
+        <tr><th>Sujeto</th><th>Forma</th><th>Ejemplo</th></tr>
+        <tr><td>I / You / We / They</td><td>have + participio</td><td>I have visited Paris.</td></tr>
+        <tr><td>He / She / It</td><td>has + participio</td><td>She has finished her homework.</td></tr>
+      </table>
+      <p style="margin-top:8px">Palabras clave: <b>ever, never, already, yet, just, for, since</b>.</p>
+    `,
+    questions: [
+      {type:'mc', prompt:'I ___ never been to Japan.', options:['have','has','had'], answer:'have', explain:'"I" usa "have" + participio.'},
+      {type:'mc', prompt:'She ___ already finished her homework.', options:['have','has','did'], answer:'has', explain:'"She" usa "has" + participio.'},
+      {type:'fill', prompt:'They ___ (live) here for ten years.', answer:'have lived', explain:'Acción que empezó en el pasado y continúa: have + lived.'},
+      {type:'mc', prompt:'___ you ever tried sushi?', options:['Have','Has','Did'], answer:'Have', explain:'"You" en preguntas de presente perfecto usa "Have".'},
+      {type:'fill', prompt:'He ___ (not/finish) the report yet.', answer:"hasn't finished", explain:'Negativo con he/she/it: hasn\'t + participio.'},
+      {type:'mc', prompt:'We ___ just arrived at the airport.', options:['have','has','are'], answer:'have', explain:'"We" usa "have" + participio.'},
+      {type:'fill', prompt:'I ___ (lose) my keys somewhere.', answer:'have lost', explain:'Resultado presente de una acción pasada: have + lost.'},
+      {type:'mc', prompt:'She ___ never seen snow before.', options:['have','has','was'], answer:'has', explain:'"She" usa "has" + participio.'},
+    ]
+  },
+
+  futuro_will: {
+    era: 'futuro', tag: 'Futuro · will',
+    title: 'Futuro con will',
+    summary: 'Predicciones, decisiones espontáneas y promesas.',
+    rule: `
+      <p><b>Will</b> es igual para todos los sujetos: <b>will + verbo base</b>.</p>
+      <table>
+        <tr><th>Uso</th><th>Ejemplo</th></tr>
+        <tr><td>Predicción</td><td>It will rain tomorrow.</td></tr>
+        <tr><td>Decisión espontánea</td><td>I will help you.</td></tr>
+        <tr><td>Promesa</td><td>I will call you tonight.</td></tr>
+      </table>
+      <p style="margin-top:8px">Negativo: <b>won't</b> (will not). Pregunta: <b>Will</b> + sujeto + verbo base.</p>
+    `,
+    questions: [
+      {type:'mc', prompt:'I think it ___ rain tomorrow.', options:['will','is','was'], answer:'will', explain:'Predicción → will + verbo base.'},
+      {type:'mc', prompt:'She ___ not come to the party.', options:['will','is','does'], answer:'will', explain:'Negativo: will not (won\'t).'},
+      {type:'fill', prompt:'They ___ (arrive) at 8 p.m. tomorrow.', answer:'will arrive', explain:'will + verbo base.'},
+      {type:'mc', prompt:'___ you help me with this?', options:['Do','Will','Are'], answer:'Will', explain:'Pregunta de futuro con will.'},
+      {type:'fill', prompt:'I promise I ___ (call) you later.', answer:'will call', explain:'Promesa → will + verbo base.'},
+      {type:'mc', prompt:'He ___ not be at school next week.', options:['won\'t','doesn\'t','isn\'t'], answer:"won't", explain:'"won\'t" es la contracción de "will not".'},
+      {type:'fill', prompt:'We ___ (not/finish) the project on time.', answer:"won't finish", explain:'Negativo con won\'t + verbo base.'},
+      {type:'mc', prompt:'In the future, robots ___ do many jobs.', options:['will','are','were'], answer:'will', explain:'Predicción a futuro → will.'},
+      {type:'fill', prompt:'Don\'t worry, I ___ (help) you with your bags.', answer:'will help', explain:'Decisión espontánea → will + verbo base.'},
+    ]
+  },
+
+  futuro_going_to: {
+    era: 'futuro', tag: 'Futuro · going to',
+    title: 'Futuro con going to',
+    summary: 'Planes ya decididos e intenciones.',
+    rule: `
+      <p>Se forma con <b>am/is/are + going to + verbo base</b>. Se usa para planes ya decididos o cosas que se ven venir por evidencia presente.</p>
+      <table>
+        <tr><th>Sujeto</th><th>Forma</th><th>Ejemplo</th></tr>
+        <tr><td>I</td><td>am going to</td><td>I am going to study medicine.</td></tr>
+        <tr><td>He / She / It</td><td>is going to</td><td>She is going to travel next month.</td></tr>
+        <tr><td>You / We / They</td><td>are going to</td><td>They are going to move.</td></tr>
+      </table>
+      <p style="margin-top:8px">Diferencia con "will": <b>going to</b> = plan ya decidido; <b>will</b> = decisión espontánea o predicción general.</p>
+    `,
+    questions: [
+      {type:'mc', prompt:'I ___ going to visit my grandma this weekend.', options:['am','is','are'], answer:'am', explain:'"I" + am + going to.'},
+      {type:'mc', prompt:'She ___ going to study abroad next year.', options:['am','is','are'], answer:'is', explain:'"She" + is + going to.'},
+      {type:'fill', prompt:'They ___ (be) going to open a new store.', answer:'are', explain:'"They" + are + going to.'},
+      {type:'mc', prompt:'Look at those clouds! It ___ going to rain.', options:['am','is','are'], answer:'is', explain:'Evidencia presente → is going to.'},
+      {type:'fill', prompt:'We ___ (be, negative) going to attend the concert.', answer:"aren't", explain:'Negativo: aren\'t going to.'},
+      {type:'mc', prompt:'___ you going to buy a new phone?', options:['Am','Is','Are'], answer:'Are', explain:'"You" en preguntas usa "Are".'},
+      {type:'fill', prompt:'He ___ (be) going to start a new job next month.', answer:'is', explain:'"He" + is + going to.'},
+      {type:'mc', prompt:'I already bought the tickets, so we ___ going to the concert.', options:['am','is','are'], answer:'are', explain:'"We" + are + going to (plan ya decidido).'},
+    ]
+  },
+
+  pasado_simple: {
+    era: 'pasado', tag: 'Pasado simple',
+    title: 'Pasado simple',
+    summary: 'Acciones terminadas en un momento específico del pasado.',
+    rule: `
+      <p>Se usa para acciones ya terminadas. Verbos regulares añaden <b>-ed</b>; los irregulares cambian de forma.</p>
+      <table>
+        <tr><th>Tipo</th><th>Ejemplo</th></tr>
+        <tr><td>Regular</td><td>walk → walked</td></tr>
+        <tr><td>Irregular</td><td>go → went, see → saw</td></tr>
+      </table>
+      <p style="margin-top:8px">Negativo: <b>didn't</b> + verbo base. Pregunta: <b>Did</b> + sujeto + verbo base.</p>
+    `,
+    questions: [
+      {type:'mc', prompt:'I ___ my homework last night.', options:['finish','finished','finishes'], answer:'finished', explain:'Verbo regular → añade -ed.'},
+      {type:'mc', prompt:'She ___ to Cancún last summer.', options:['go','goes','went'], answer:'went', explain:'"Go" es irregular → went.'},
+      {type:'mc', prompt:'They ___ not attend the meeting.', options:['did','do','was'], answer:'did', explain:'Negativo en pasado: didn\'t (did + not) + verbo base.'},
+      {type:'fill', prompt:'We ___ (watch) a great movie yesterday.', answer:'watched', explain:'Verbo regular → -ed.'},
+      {type:'mc', prompt:'___ you call your mom yesterday?', options:['Do','Did','Were'], answer:'Did', explain:'Pregunta en pasado siempre usa "Did".'},
+      {type:'fill', prompt:'He ___ (buy) a new phone last week.', answer:'bought', explain:'"Buy" es irregular → bought.'},
+      {type:'mc', prompt:'I ___ not see him at the party.', options:['did','does','was'], answer:'did', explain:'Negativo: didn\'t + verbo base.'},
+      {type:'fill', prompt:'The teacher ___ (explain) the lesson clearly.', answer:'explained', explain:'Verbo regular → -ed.'},
+      {type:'mc', prompt:'She ___ her keys yesterday.', options:['lose','loses','lost'], answer:'lost', explain:'"Lose" es irregular → lost.'},
+      {type:'fill', prompt:'We ___ (not/have) time to eat breakfast.', answer:"didn't have", explain:'Negativo con didn\'t + verbo base.'},
+      {type:'mc', prompt:'They ___ a beautiful sunset last night.', options:['see','saw','seen'], answer:'saw', explain:'"See" es irregular → saw.'},
+    ]
+  },
+
+  modales: {
+    era: 'modales', tag: 'Verbos modales',
+    title: 'Los 10 verbos modales',
+    summary: 'Can, could, may, might, must, shall, should, will, would y ought to.',
+    rule: `
+      <p>Los modales van <b>siempre antes de un verbo base</b> (sin "to", excepto "ought to") y <b>no cambian</b> según el sujeto (nunca llevan -s).</p>
+      <table>
+        <tr><th>Modal</th><th>Uso principal</th></tr>
+        <tr><td>can</td><td>habilidad / permiso informal</td></tr>
+        <tr><td>could</td><td>habilidad pasada / petición cortés</td></tr>
+        <tr><td>may</td><td>permiso formal / posibilidad</td></tr>
+        <tr><td>might</td><td>posibilidad (menos segura)</td></tr>
+        <tr><td>must</td><td>obligación fuerte / deducción</td></tr>
+        <tr><td>shall</td><td>sugerencia formal / futuro (británico)</td></tr>
+        <tr><td>should</td><td>consejo / recomendación</td></tr>
+        <tr><td>will</td><td>futuro / decisión</td></tr>
+        <tr><td>would</td><td>petición cortés / condicional</td></tr>
+        <tr><td>ought to</td><td>obligación moral / consejo</td></tr>
+      </table>
+      <p style="margin-top:8px">Negativo: modal + <b>not</b> + verbo base. Pregunta: <b>Modal</b> + sujeto + verbo base (sin do/does/did).</p>
+    `,
+    questions: [
+      {type:'mc', prompt:'She ___ speak three languages. (habilidad)', options:['can','must','should'], answer:'can', explain:'"Can" expresa habilidad.'},
+      {type:'mc', prompt:'You ___ see a doctor, that cough sounds bad. (consejo)', options:['can','should','may'], answer:'should', explain:'"Should" se usa para dar consejos.'},
+      {type:'mc', prompt:'Students ___ wear a uniform at this school. (obligación)', options:['might','must','could'], answer:'must', explain:'"Must" expresa una obligación fuerte.'},
+      {type:'fill', prompt:'___ I open the window, please? (permiso formal)', answer:'May', explain:'"May" se usa para pedir permiso formalmente.'},
+      {type:'mc', prompt:'It ___ rain later, the sky looks cloudy. (posibilidad)', options:['might','must','can'], answer:'might', explain:'"Might" expresa una posibilidad, no una certeza.'},
+      {type:'mc', prompt:'___ you help me carry these bags? (petición cortés)', options:['Must','Could','Shall'], answer:'Could', explain:'"Could" se usa para pedir algo de manera cortés.'},
+      {type:'fill', prompt:'You ___ not park here, it\'s forbidden. (prohibición)', answer:'must', explain:'"Must not / mustn\'t" expresa prohibición.'},
+      {type:'mc', prompt:'When I was a child, I ___ climb trees easily. (habilidad en el pasado)', options:['can','could','should'], answer:'could', explain:'"Could" es la forma pasada de "can" para habilidad.'},
+      {type:'mc', prompt:'___ we start the meeting now? (sugerencia formal)', options:['Shall','Might','Must'], answer:'Shall', explain:'"Shall" se usa para hacer una sugerencia formal.'},
+      {type:'fill', prompt:'You ___ (ought) to apologize to her. (obligación moral)', answer:'ought to', explain:'"Ought to" tiene el mismo significado que "should".'},
+      {type:'mc', prompt:'___ you like some coffee? (oferta cortés)', options:['Would','Must','Can'], answer:'Would', explain:'"Would you like...?" es una oferta cortés.'},
+      {type:'mc', prompt:'I ___ finish this project by Friday, I promise. (decisión/futuro)', options:['can','will','might'], answer:'will', explain:'"Will" expresa una decisión o promesa a futuro.'},
+    ]
+  },
+
+  futuro_continuo: {
+    era: 'futuro', tag: 'Futuro · presente continuo',
+    title: 'Presente continuo con valor de futuro',
+    summary: 'Planes y citas ya organizadas para un momento futuro.',
+    rule: `
+      <p>Se forma igual que el presente continuo (<b>am/is/are + verbo-ing</b>), pero se usa con una expresión de tiempo futuro para hablar de <b>planes ya organizados</b>, casi siempre con otra persona o con hora/fecha decididas.</p>
+      <table>
+        <tr><th>Sujeto</th><th>Forma</th><th>Ejemplo</th></tr>
+        <tr><td>I</td><td>am + -ing</td><td>I am meeting Ana tomorrow.</td></tr>
+        <tr><td>He / She / It</td><td>is + -ing</td><td>She is flying to Mexico on Friday.</td></tr>
+        <tr><td>You / We / They</td><td>are + -ing</td><td>We are having dinner tonight.</td></tr>
+      </table>
+      <p style="margin-top:8px">Se diferencia de <b>"going to"</b> (intención, sin arreglo confirmado) y de <b>"will"</b> (decisión espontánea o predicción): el presente continuo de futuro implica que el plan ya está confirmado, casi siempre con hora/lugar/persona específicos.</p>
+    `,
+    questions: [
+      {type:'mc', prompt:'I ___ meeting my friends tomorrow afternoon.', options:['am','is','are'], answer:'am', explain:'"I" + am + verbo-ing para un plan ya organizado.'},
+      {type:'mc', prompt:'She ___ flying to Canada next week.', options:['am','is','are'], answer:'is', explain:'"She" + is + verbo-ing.'},
+      {type:'fill', prompt:'We ___ (have) dinner with my grandparents on Sunday.', answer:'are having', explain:'"We" + are + having: plan ya organizado para el domingo.'},
+      {type:'mc', prompt:'___ you doing anything special this weekend?', options:['Am','Is','Are'], answer:'Are', explain:'"You" en preguntas usa "Are".'},
+      {type:'fill', prompt:'He ___ (start) his new job on Monday.', answer:'is starting', explain:'"He" + is + starting: fecha ya decidida.'},
+      {type:'mc', prompt:'They ___ not coming to the party tonight.', options:['am','is','are'], answer:'are', explain:'"They" + are + not + verbo-ing.'},
+      {type:'fill', prompt:'I ___ (see) the dentist at 4 p.m. tomorrow.', answer:'am seeing', explain:'Cita ya organizada → am + seeing.'},
+      {type:'mc', prompt:'What ___ you doing after school today?', options:['do','are','were'], answer:'are', explain:'Se usa el presente continuo para preguntar por planes cercanos.'},
+      {type:'mc', prompt:'Which sentence expresses a plan already arranged with someone?', options:["I'm having lunch with Sara at 1 p.m.","I will probably have lunch late.","I might have lunch at home."], answer:"I'm having lunch with Sara at 1 p.m.", explain:'El presente continuo de futuro se usa para planes ya confirmados con otra persona.'},
+      {type:'fill', prompt:'She ___ (not/travel) this summer, she changed her plans.', answer:"isn't traveling", explain:'Negativo: isn\'t + verbo-ing.'},
+    ]
+  },
+
+  have_to: {
+    era: 'extra', tag: 'Have to / don\'t have to',
+    title: 'Have to — obligación y necesidad',
+    summary: 'Reglas y obligaciones externas, y su forma negativa (no es necesario).',
+    rule: `
+      <p><b>Have to</b> expresa una obligación que viene de una regla o circunstancia externa (no de la opinión del hablante, como "must"). No es un modal, así que necesita <b>do/does</b> en preguntas y negativos.</p>
+      <table>
+        <tr><th>Sujeto</th><th>Forma</th><th>Ejemplo</th></tr>
+        <tr><td>I / You / We / They</td><td>have to + verbo base</td><td>I have to wear a uniform.</td></tr>
+        <tr><td>He / She / It</td><td>has to + verbo base</td><td>She has to study every day.</td></tr>
+      </table>
+      <p style="margin-top:8px">Negativo: <b>don't/doesn't have to</b> = no es necesario (¡no es prohibición!). Pregunta: <b>Do/Does</b> + sujeto + <b>have to</b> + verbo base.</p>
+    `,
+    questions: [
+      {type:'mc', prompt:'She ___ to wear a uniform at school. (regla)', options:['have','has','is'], answer:'has', explain:'"She" usa "has to".'},
+      {type:'mc', prompt:'I ___ to finish this report by Friday.', options:['have','has','am'], answer:'have', explain:'"I" usa "have to".'},
+      {type:'fill', prompt:'You ___ (not/have) to bring your own pencil, I have extra ones.', answer:"don't have", explain:'"Don\'t have to" = no es necesario, no prohibición.'},
+      {type:'mc', prompt:'___ you have to work on Saturdays?', options:['Do','Does','Are'], answer:'Do', explain:'Pregunta con "have to" necesita "do/does".'},
+      {type:'fill', prompt:'He ___ (not/have) to take the bus, his dad drives him.', answer:"doesn't have", explain:'"He" negativo: doesn\'t have to.'},
+      {type:'mc', prompt:'We ___ to leave early tomorrow, our flight is at 6 a.m.', options:['have','has','are'], answer:'have', explain:'"We" usa "have to".'},
+      {type:'mc', prompt:'Which one means "it is not necessary"?', options:["You don't have to come.","You must not come.","You can't come."], answer:"You don't have to come.", explain:'"Don\'t have to" significa que algo no es necesario, no que esté prohibido.'},
+      {type:'fill', prompt:'Does she ___ (have) to ask for permission?', answer:'have', explain:'Después de "does", el verbo regresa a su forma base: have to.'},
+      {type:'mc', prompt:'They ___ to pay to enter the museum on Sundays, it\'s free.', options:["don't have","doesn't have","aren't"], answer:"don't have", explain:'"They" negativo: don\'t have to.'},
+    ]
+  },
+
+  compounds: {
+    era: 'extra', tag: 'Some / any / no',
+    title: 'Compuestos: some-, any-, no-',
+    summary: 'Someone/anyone/no one, somewhere/anywhere/nowhere, something/anything/nothing.',
+    rule: `
+      <p>Estas palabras compuestas se forman combinando <b>some-, any-, no-</b> con <b>-one/-body</b> (persona), <b>-where</b> (lugar) y <b>-thing</b> (cosa).</p>
+      <table>
+        <tr><th></th><th>Persona</th><th>Lugar</th><th>Cosa</th></tr>
+        <tr><td>some-</td><td>someone / somebody</td><td>somewhere</td><td>something</td></tr>
+        <tr><td>any-</td><td>anyone / anybody</td><td>anywhere</td><td>anything</td></tr>
+        <tr><td>no-</td><td>no one / nobody</td><td>nowhere</td><td>nothing</td></tr>
+      </table>
+      <p style="margin-top:8px"><b>Some-</b> en afirmativas; <b>any-</b> en preguntas y negativos; <b>no-</b> ya es negativo por sí solo, así que va con el verbo en afirmativo (nunca con "not").</p>
+    `,
+    questions: [
+      {type:'mc', prompt:'There is ___ at the door.', options:['someone','anyone','no one'], answer:'someone', explain:'Oración afirmativa → someone.'},
+      {type:'mc', prompt:'I don\'t have ___ to do today.', options:['something','anything','nothing'], answer:'anything', explain:'Oración negativa → anything.'},
+      {type:'fill', prompt:'___ called me yesterday. (nadie)', answer:'Nobody', explain:'"Nobody" ya es negativo, va con el verbo en afirmativo.'},
+      {type:'mc', prompt:'Is there ___ in the fridge?', options:['something','anything','nothing'], answer:'anything', explain:'Pregunta → anything.'},
+      {type:'fill', prompt:'I saw ___ interesting at the museum. (algo)', answer:'something', explain:'Oración afirmativa → something.'},
+      {type:'mc', prompt:'She looked everywhere but found the keys ___.', options:['somewhere','anywhere','nowhere'], answer:'nowhere', explain:'"Nowhere" = en ningún lugar, con verbo afirmativo.'},
+      {type:'mc', prompt:'We can go ___ you want for dinner.', options:['somewhere','anywhere','nowhere'], answer:'anywhere', explain:'Con "want" en este contexto se usa "anywhere" (cualquier lugar).'},
+      {type:'fill', prompt:'There isn\'t ___ to sit, all the chairs are taken.', answer:'anywhere', explain:'Negativo → anywhere.'},
+      {type:'mc', prompt:'___ is home right now, they all went out.', options:['Someone','Anyone','No one'], answer:'No one', explain:'"No one" = nadie, con verbo afirmativo.'},
+    ]
+  },
+
+  verb_ing_base: {
+    era: 'extra', tag: 'Verbo + -ing / base',
+    title: 'Verbo + -ing vs. verbo + forma base',
+    summary: 'Qué verbos van seguidos de -ing, cuáles de forma base y cuáles de "to + verbo".',
+    rule: `
+      <p>Algunos verbos siempre van seguidos de <b>-ing</b> (gerundio); otros de la <b>forma base</b> (sin "to"); y otros de <b>"to" + verbo base</b> (infinitivo).</p>
+      <table>
+        <tr><th>Grupo</th><th>Ejemplos de verbos</th><th>Ejemplo</th></tr>
+        <tr><td>+ -ing</td><td>enjoy, like, love, hate, mind, finish, keep</td><td>I enjoy playing soccer.</td></tr>
+        <tr><td>+ forma base</td><td>can, could, must, should, will (modales)</td><td>You should drink water.</td></tr>
+        <tr><td>+ to + base</td><td>want, need, decide, plan, hope</td><td>I want to travel.</td></tr>
+      </table>
+    `,
+    questions: [
+      {type:'mc', prompt:'I enjoy ___ books in my free time.', options:['read','reading','to read'], answer:'reading', explain:'"Enjoy" siempre va seguido de verbo-ing.'},
+      {type:'mc', prompt:'You should ___ more water every day.', options:['drink','drinking','to drink'], answer:'drink', explain:'Después de un modal (should), el verbo va en forma base.'},
+      {type:'fill', prompt:'I want ___ (travel) to Japan someday.', answer:'to travel', explain:'"Want" va seguido de "to + verbo base".'},
+      {type:'mc', prompt:'She hates ___ up early.', options:['get','getting','to getting'], answer:'getting', explain:'"Hate" va seguido de verbo-ing.'},
+      {type:'mc', prompt:'We can ___ the bus from here.', options:['take','taking','to take'], answer:'take', explain:'Después de "can" el verbo va en forma base.'},
+      {type:'fill', prompt:'They decided ___ (stay) home this weekend.', answer:'to stay', explain:'"Decide" va seguido de "to + verbo base".'},
+      {type:'mc', prompt:'He finished ___ his homework before dinner.', options:['do','doing','to do'], answer:'doing', explain:'"Finish" va seguido de verbo-ing.'},
+      {type:'fill', prompt:'I need ___ (buy) some groceries today.', answer:'to buy', explain:'"Need" va seguido de "to + verbo base".'},
+      {type:'mc', prompt:'You must ___ your homework before you play.', options:['finish','finishing','to finish'], answer:'finish', explain:'Después de un modal (must), forma base.'},
+      {type:'mc', prompt:'I don\'t mind ___ the dishes tonight.', options:['wash','washing','to wash'], answer:'washing', explain:'"Mind" va seguido de verbo-ing.'},
+    ]
+  },
+
+  countable_uncountable: {
+    era: 'extra', tag: 'Sustantivos contables / incontables',
+    title: 'Countable and uncountable nouns',
+    summary: 'Cómo se forman y en qué se diferencian.',
+    rule: `
+      <p><b>Contables</b>: se pueden contar uno por uno; tienen singular y plural, usan a/an en singular, y se preguntan con <b>How many...?</b></p>
+      <p><b>Incontables</b>: no se separan en unidades individuales (líquidos, materiales, ideas); no tienen plural, no usan a/an, van con el verbo en singular, y se preguntan con <b>How much...?</b></p>
+      <table>
+        <tr><th>Contables</th><th>Incontables</th></tr>
+        <tr><td>a book, two books</td><td>water, rice, money</td></tr>
+        <tr><td>How many books?</td><td>How much water?</td></tr>
+      </table>
+      <p style="margin-top:8px">Para medir incontables se usan expresiones como <b>a piece of, a glass of, a bowl of</b> + sustantivo incontable.</p>
+    `,
+    questions: [
+      {type:'mc', prompt:'I have three ___ in my backpack.', options:['book','books','a book'], answer:'books', explain:'"Book" es contable → plural con -s.'},
+      {type:'mc', prompt:'There isn\'t much ___ in the bottle.', options:['water','waters','a water'], answer:'water', explain:'"Water" es incontable, no tiene plural.'},
+      {type:'fill', prompt:'How ___ apples do you want? (contable)', answer:'many', explain:'"How many" se usa con sustantivos contables.'},
+      {type:'mc', prompt:'How ___ rice do we need for the recipe?', options:['many','much'], answer:'much', explain:'"Rice" es incontable → How much.'},
+      {type:'fill', prompt:'Can I have ___ (a glass) of water, please?', answer:'a glass', explain:'Se usa "a glass of" para medir un sustantivo incontable.'},
+      {type:'mc', prompt:'She gave me some good ___.', options:['advice','advices','an advice'], answer:'advice', explain:'"Advice" es incontable en inglés, nunca lleva plural.'},
+      {type:'mc', prompt:'We need ___ information about the trip.', options:['many','much'], answer:'much', explain:'"Information" es incontable → much.'},
+      {type:'fill', prompt:'I bought two ___ (loaf) of bread. (irregular plural)', answer:'loaves', explain:'"Bread" es incontable, pero "loaf" (una barra) sí tiene plural irregular: loaves.'},
+    ]
+  },
+
+  a_lot_much_many: {
+    era: 'extra', tag: 'A lot / much / many',
+    title: 'A lot of, much, many, how much/many',
+    summary: 'Cuánto y cuántos: cómo elegir la palabra correcta según el sustantivo.',
+    rule: `
+      <p><b>Many</b> + sustantivo contable plural (sobre todo en preguntas y negativos). <b>Much</b> + sustantivo incontable (sobre todo en preguntas y negativos). <b>A lot of / lots of</b> funciona con ambos tipos y es más común en afirmativas.</p>
+      <table>
+        <tr><th>Expresión</th><th>Se usa con</th><th>Ejemplo</th></tr>
+        <tr><td>many</td><td>contables</td><td>many friends</td></tr>
+        <tr><td>much</td><td>incontables</td><td>much time</td></tr>
+        <tr><td>a lot of / lots of</td><td>ambos</td><td>a lot of books / a lot of water</td></tr>
+      </table>
+      <p style="margin-top:8px">Preguntas de cantidad: <b>How many...?</b> (contables) y <b>How much...?</b> (incontables).</p>
+    `,
+    questions: [
+      {type:'mc', prompt:'I don\'t have ___ friends in this city.', options:['many','much'], answer:'many', explain:'"Friends" es contable → many.'},
+      {type:'mc', prompt:'There isn\'t ___ time left before the exam.', options:['many','much'], answer:'much', explain:'"Time" es incontable → much.'},
+      {type:'fill', prompt:'She has ___ (a lot) of books at home.', answer:'a lot', explain:'"A lot of" funciona con sustantivos contables e incontables.'},
+      {type:'mc', prompt:'How ___ people are coming to the party?', options:['many','much'], answer:'many', explain:'"People" es contable → How many.'},
+      {type:'mc', prompt:'How ___ sugar do you want in your coffee?', options:['many','much'], answer:'much', explain:'"Sugar" es incontable → How much.'},
+      {type:'fill', prompt:'We have ___ (a lot) of homework this week.', answer:'a lot', explain:'"A lot of" es común en oraciones afirmativas.'},
+      {type:'mc', prompt:'There are ___ students in this class.', options:['many','much'], answer:'many', explain:'"Students" es contable → many.'},
+      {type:'fill', prompt:'I don\'t need ___ (much) money for the trip.', answer:'much', explain:'"Money" es incontable → much.'},
+    ]
+  },
+
+  comparative_superlative: {
+    era: 'extra', tag: 'Comparativos y superlativos',
+    title: 'Comparative and superlative adjectives',
+    summary: 'Adjetivos cortos, largos e irregulares: cómo cambian según el número de sílabas.',
+    rule: `
+      <p><b>1 sílaba</b>: adjetivo + <b>-er</b> (comparativo) / the + adjetivo + <b>-est</b> (superlativo). Si terminan en consonante-vocal-consonante, se duplica la última consonante (big → bigger → the biggest).</p>
+      <p><b>2 sílabas terminados en -y</b>: cambia la "y" por "i" + er/est (happy → happier → the happiest).</p>
+      <p><b>2+ sílabas (largos)</b>: <b>more</b> + adjetivo / <b>the most</b> + adjetivo (expensive → more expensive → the most expensive).</p>
+      <p><b>Irregulares</b>: good → better → the best; bad → worse → the worst; far → farther/further → the farthest/furthest.</p>
+    `,
+    questions: [
+      {type:'mc', prompt:'This book is ___ than that one. (long)', options:['longer','more long','longest'], answer:'longer', explain:'Adjetivo de 1 sílaba → + er.'},
+      {type:'mc', prompt:'She is the ___ student in the class. (smart)', options:['smartest','most smart','smarter'], answer:'smartest', explain:'Adjetivo corto, superlativo → the + adjetivo + est.'},
+      {type:'fill', prompt:'This phone is ___ (expensive) than mine.', answer:'more expensive', explain:'Adjetivo largo (2+ sílabas) → more + adjetivo.'},
+      {type:'mc', prompt:'He is ___ than his brother. (happy)', options:['happier','more happy','happiest'], answer:'happier', explain:'Termina en -y → cambia a "i" + er.'},
+      {type:'fill', prompt:'This is ___ (bad) movie I have ever seen.', answer:'the worst', explain:'"Bad" es irregular: bad → worse → the worst.'},
+      {type:'mc', prompt:'That was the ___ day of my life. (good)', options:['best','goodest','better'], answer:'best', explain:'"Good" es irregular: good → better → the best.'},
+      {type:'mc', prompt:'This is the ___ hotel in the city. (comfortable)', options:['comfortablest','most comfortable','comfortabler'], answer:'most comfortable', explain:'Adjetivo largo → the most + adjetivo.'},
+      {type:'fill', prompt:'My sister is ___ (tall) than me.', answer:'taller', explain:'Adjetivo de 1 sílaba → + er.'},
+      {type:'mc', prompt:'Which city is ___ from here? (far)', options:['farther','more far','farrer'], answer:'farther', explain:'"Far" es irregular: far → farther/further.'},
+      {type:'fill', prompt:'This exercise is ___ (easy) than the last one.', answer:'easier', explain:'Termina en -y → cambia a "i" + er.'},
+    ]
+  },
+};
+
+const EXAM_TENSE_ORDER = ['tobe_presente','tobe_pasado','pasado_continuo','presente_simple','presente_continuo','presente_perfecto','futuro_will','futuro_going_to','futuro_continuo','pasado_simple','modales','have_to','compounds','verb_ing_base','countable_uncountable','a_lot_much_many','comparative_superlative'];
+
+/* ============ GUIDES (pestaña de explicación) ============ */
+const GUIDES = {
+  tobe_presente: {
+    esName: 'Verbo "ser/estar" en presente',
+    structure: [
+      {label:'Afirmativa', formula:'Sujeto + am / is / are + complemento',
+       note:'El verbo to be funciona como verbo principal; no necesita otro verbo después.',
+       example:{en:'I am a student.', es:'Soy estudiante.'}},
+      {label:'Negativa', formula:"Sujeto + am not / isn't / aren't + complemento",
+       note:"Se agrega \"not\" justo después de am/is/are. \"Isn't\" y \"aren't\" son las contracciones más usadas; \"amn't\" no existe, por eso con \"I\" se dice \"I am not\" completo.",
+       example:{en:"She isn't ready.", es:'Ella no está lista.'}},
+      {label:'Pregunta', formula:'Am / Is / Are + sujeto + complemento?',
+       note:"Se invierte el orden: el verbo to be pasa antes del sujeto. Respuesta corta: \"Yes, she is.\" / \"No, she isn't.\"",
+       example:{en:'Are you ready?', es:'¿Estás listo?'}},
+    ],
+    examples: [
+      {en:'I am a high school student.', es:'Soy estudiante de preparatoria.'},
+      {en:'She is not tired.', es:'Ella no está cansada.'},
+      {en:'Are you ready for the exam?', es:'¿Estás listo para el examen?'},
+    ],
+    signals: ['now','today','right now','always','usually'],
+  },
+  tobe_pasado: {
+    esName: 'Verbo "ser/estar" en pasado',
+    structure: [
+      {label:'Afirmativa', formula:'Sujeto + was / were + complemento',
+       note:'Solo existen dos formas en pasado: "was" (singular) y "were" (plural o con "you").',
+       example:{en:'I was tired.', es:'Estaba cansado.'}},
+      {label:'Negativa', formula:"Sujeto + wasn't / weren't + complemento",
+       note:'Se agrega "not" después de was/were. Contracciones más comunes: wasn\'t, weren\'t.',
+       example:{en:"They weren't home.", es:'Ellos no estaban en casa.'}},
+      {label:'Pregunta', formula:'Was / Were + sujeto + complemento?',
+       note:'Se invierte el orden igual que en presente. Respuesta corta: "Yes, I was." / "No, they weren\'t."',
+       example:{en:'Was she at school?', es:'¿Ella estuvo en la escuela?'}},
+    ],
+    examples: [
+      {en:'I was at home yesterday.', es:'Yo estaba en casa ayer.'},
+      {en:'They were not happy with the result.', es:'Ellos no estaban contentos con el resultado.'},
+      {en:'Was she at the party?', es:'¿Ella estuvo en la fiesta?'},
+    ],
+    signals: ['yesterday','last night','last week','ago','in 2010'],
+  },
+  pasado_continuo: {
+    esName: 'Pasado progresivo (acción en curso en el pasado)',
+    structure: [
+      {label:'Afirmativa', formula:'Sujeto + was / were + verbo-ing',
+       note:'Se usa was/were según el sujeto, igual que en to be pasado, seguido del verbo con -ing.',
+       example:{en:'I was reading.', es:'Estaba leyendo.'}},
+      {label:'Negativa', formula:"Sujeto + wasn't / weren't + verbo-ing",
+       note:'"Not" se coloca justo después de was/were, antes del verbo-ing.',
+       example:{en:"We weren't sleeping.", es:'No estábamos durmiendo.'}},
+      {label:'Pregunta', formula:'Was / Were + sujeto + verbo-ing...?',
+       note:'Was/Were se coloca al inicio de la oración; el verbo-ing no cambia.',
+       example:{en:'Were you studying at 8 p.m.?', es:'¿Estabas estudiando a las 8 p.m.?'}},
+    ],
+    examples: [
+      {en:'I was studying when you called.', es:'Yo estaba estudiando cuando llamaste.'},
+      {en:'They were not listening to the teacher.', es:'Ellos no estaban escuchando al maestro.'},
+      {en:'Were you sleeping at midnight?', es:'¿Estabas durmiendo a medianoche?'},
+    ],
+    signals: ['while','when','at that moment','all day yesterday'],
+  },
+  presente_simple: {
+    esName: 'Presente simple (rutinas y hechos generales)',
+    structure: [
+      {label:'Afirmativa', formula:'Sujeto + verbo base (+s/es con he/she/it)',
+       note:'Solo la tercera persona singular (he/she/it) agrega -s o -es al verbo principal.',
+       example:{en:'She plays tennis.', es:'Ella juega tenis.'}},
+      {label:'Negativa', formula:"Sujeto + don't / doesn't + verbo base",
+       note:'"Doesn\'t" ya lleva la "s" de la tercera persona, por eso el verbo principal regresa a su forma base (sin -s). Error común: "She doesn\'t plays".',
+       example:{en:"He doesn't play tennis.", es:'Él no juega tenis.'}},
+      {label:'Pregunta', formula:'Do / Does + sujeto + verbo base...?',
+       note:'Igual que en negativo: el verbo principal pierde la -s porque "does" ya la lleva. Respuesta corta: "Yes, she does." / "No, she doesn\'t."',
+       example:{en:'Does she play tennis?', es:'¿Ella juega tenis?'}},
+    ],
+    examples: [
+      {en:'I go to school every day.', es:'Voy a la escuela todos los días.'},
+      {en:'She doesn\'t like spicy food.', es:'A ella no le gusta la comida picante.'},
+      {en:'Do you play soccer?', es:'¿Juegas futbol?'},
+    ],
+    signals: ['always','usually','every day','often','never','on Mondays'],
+  },
+  presente_continuo: {
+    esName: 'Presente progresivo (acción en curso ahora)',
+    structure: [
+      {label:'Afirmativa', formula:'Sujeto + am / is / are + verbo-ing',
+       note:'Se usa para acciones que están ocurriendo justo en este momento.',
+       example:{en:'I am writing.', es:'Estoy escribiendo.'}},
+      {label:'Negativa', formula:"Sujeto + am not / isn't / aren't + verbo-ing",
+       note:'"Not" va después del verbo to be, antes del verbo-ing.',
+       example:{en:"She isn't listening.", es:'Ella no está escuchando.'}},
+      {label:'Pregunta', formula:'Am / Is / Are + sujeto + verbo-ing...?',
+       note:'El verbo to be se mueve al inicio de la oración; el verbo-ing se queda igual.',
+       example:{en:'Are they coming?', es:'¿Ellos vienen?'}},
+    ],
+    examples: [
+      {en:'I am studying right now.', es:'Estoy estudiando en este momento.'},
+      {en:'He is not watching TV.', es:'Él no está viendo la tele.'},
+      {en:'Are they coming to the party?', es:'¿Ellos van a venir a la fiesta?'},
+    ],
+    signals: ['right now','at the moment','now','look!','listen!'],
+  },
+  presente_perfecto: {
+    esName: 'Presente perfecto (experiencias y resultados actuales)',
+    structure: [
+      {label:'Afirmativa', formula:'Sujeto + have / has + participio pasado',
+       note:'"Have" se usa con I/you/we/they; "has" con he/she/it.',
+       example:{en:'I have finished.', es:'He terminado.'}},
+      {label:'Negativa', formula:"Sujeto + haven't / hasn't + participio pasado",
+       note:'"Not" se agrega directamente después de have/has.',
+       example:{en:"She hasn't called.", es:'Ella no ha llamado.'}},
+      {label:'Pregunta', formula:'Have / Has + sujeto + participio pasado...?',
+       note:'Have/Has se coloca al inicio de la pregunta, antes del sujeto.',
+       example:{en:'Have you finished?', es:'¿Has terminado?'}},
+    ],
+    examples: [
+      {en:'I have visited New York twice.', es:'He visitado Nueva York dos veces.'},
+      {en:'She hasn\'t finished her homework yet.', es:'Ella todavía no ha terminado su tarea.'},
+      {en:'Have you ever tried sushi?', es:'¿Alguna vez has probado el sushi?'},
+    ],
+    signals: ['ever','never','already','yet','just','for','since'],
+  },
+  futuro_will: {
+    esName: 'Futuro con "will" (predicciones y decisiones espontáneas)',
+    structure: [
+      {label:'Afirmativa', formula:'Sujeto + will + verbo base',
+       note:'"Will" es igual para todos los sujetos; nunca cambia de forma.',
+       example:{en:'I will call you.', es:'Te llamaré.'}},
+      {label:'Negativa', formula:"Sujeto + won't + verbo base",
+       note:'"Won\'t" es la contracción de "will not" y es mucho más común que la forma completa en el habla cotidiana.',
+       example:{en:"He won't come.", es:'Él no vendrá.'}},
+      {label:'Pregunta', formula:'Will + sujeto + verbo base...?',
+       note:'"Will" se mueve al inicio de la oración. Respuesta corta: "Yes, I will." / "No, I won\'t."',
+       example:{en:'Will you help me?', es:'¿Me ayudarás?'}},
+    ],
+    examples: [
+      {en:'It will rain tomorrow.', es:'Mañana va a llover.'},
+      {en:'I won\'t be late.', es:'No voy a llegar tarde.'},
+      {en:'Will you help me?', es:'¿Me vas a ayudar?'},
+    ],
+    signals: ['tomorrow','next week','I think','probably','maybe'],
+  },
+  futuro_going_to: {
+    esName: 'Futuro con "going to" (planes ya decididos)',
+    structure: [
+      {label:'Afirmativa', formula:'Sujeto + am / is / are + going to + verbo base',
+       note:'Se usa para planes ya decididos o cosas que se ven venir por evidencia presente, no para decisiones espontáneas.',
+       example:{en:'I am going to study medicine.', es:'Voy a estudiar medicina.'}},
+      {label:'Negativa', formula:"Sujeto + am not / isn't / aren't + going to + verbo base",
+       note:'"Not" va después del verbo to be, antes de "going to".',
+       example:{en:"She isn't going to come.", es:'Ella no va a venir.'}},
+      {label:'Pregunta', formula:'Am / Is / Are + sujeto + going to + verbo base...?',
+       note:'El verbo to be se mueve al inicio de la oración; "going to" permanece igual sin cambios.',
+       example:{en:'Are you going to study?', es:'¿Vas a estudiar?'}},
+    ],
+    examples: [
+      {en:'I am going to study medicine.', es:'Voy a estudiar medicina.'},
+      {en:'She isn\'t going to travel this year.', es:'Ella no va a viajar este año.'},
+      {en:'Are you going to buy a new phone?', es:'¿Vas a comprar un teléfono nuevo?'},
+    ],
+    signals: ['this weekend','next month','already decided','look at those clouds'],
+  },
+  pasado_simple: {
+    esName: 'Pasado simple (acciones terminadas)',
+    structure: [
+      {label:'Afirmativa', formula:'Sujeto + verbo en pasado (-ed o irregular)',
+       note:'Los verbos regulares agregan -ed; los irregulares cambian de forma por completo (go → went).',
+       example:{en:'I finished my homework.', es:'Terminé mi tarea.'}},
+      {label:'Negativa', formula:"Sujeto + didn't + verbo base",
+       note:'"Didn\'t" ya lleva el pasado, por eso el verbo principal regresa a su forma base. Error común: "I didn\'t went".',
+       example:{en:"She didn't go.", es:'Ella no fue.'}},
+      {label:'Pregunta', formula:'Did + sujeto + verbo base...?',
+       note:'Igual que en negativo, el verbo principal regresa a su forma base porque "did" ya lleva el pasado. Respuesta corta: "Yes, I did." / "No, I didn\'t."',
+       example:{en:'Did you go?', es:'¿Fuiste?'}},
+    ],
+    examples: [
+      {en:'I finished my homework last night.', es:'Terminé mi tarea anoche.'},
+      {en:'She didn\'t go to school yesterday.', es:'Ella no fue a la escuela ayer.'},
+      {en:'Did you call your mom?', es:'¿Le llamaste a tu mamá?'},
+    ],
+    signals: ['yesterday','last night','last week','ago','in 2019'],
+  },
+  modales: {
+    esName: 'Modal verbs — verbos auxiliares de modo',
+    structure: [
+      {label:'Afirmativa', formula:'Sujeto + modal + verbo base',
+       note:'Los modales no cambian según el sujeto (nunca llevan -s) y el verbo que sigue va siempre en forma base, sin "to" — excepto después de "ought to".',
+       example:{en:'She can swim.', es:'Ella puede nadar.'}},
+      {label:'Negativa', formula:'Sujeto + modal + not + verbo base',
+       note:'"Not" se agrega directamente después del modal, sin usar do/does/did. Contracciones comunes: can\'t, couldn\'t, shouldn\'t, mustn\'t, wouldn\'t, won\'t.',
+       example:{en:"You shouldn't worry.", es:'No deberías preocuparte.'}},
+      {label:'Pregunta', formula:'Modal + sujeto + verbo base...?',
+       note:'El modal se mueve al inicio de la oración; nunca se usa do/does/did junto con un modal.',
+       example:{en:'Could you help me?', es:'¿Podrías ayudarme?'}},
+    ],
+    examples: [
+      {en:'You must wear a seatbelt.', es:'Debes usar cinturón de seguridad.'},
+      {en:'She might come to the party.', es:'Puede que ella venga a la fiesta.'},
+      {en:'Would you like some coffee?', es:'¿Te gustaría un café?'},
+    ],
+    signals: ['ability','permission','advice','obligation','possibility','polite request'],
+    modalsTable: [
+      {modal:'can', use:'habilidad / permiso informal', en:'I can swim.', es:'Puedo nadar.'},
+      {modal:'could', use:'habilidad pasada / petición cortés', en:'Could you help me?', es:'¿Podrías ayudarme?'},
+      {modal:'may', use:'permiso formal / posibilidad', en:'May I leave?', es:'¿Puedo retirarme?'},
+      {modal:'might', use:'posibilidad (menos segura)', en:'It might rain.', es:'Podría llover.'},
+      {modal:'must', use:'obligación fuerte / deducción', en:'You must study.', es:'Debes estudiar.'},
+      {modal:'shall', use:'sugerencia formal / futuro (británico)', en:'Shall we dance?', es:'¿Bailamos?'},
+      {modal:'should', use:'consejo / recomendación', en:'You should sleep more.', es:'Deberías dormir más.'},
+      {modal:'will', use:'futuro / decisión', en:'I will help you.', es:'Te ayudaré.'},
+      {modal:'would', use:'petición cortés / condicional', en:'Would you like some tea?', es:'¿Te gustaría un té?'},
+      {modal:'ought to', use:'obligación moral / consejo', en:'You ought to apologize.', es:'Deberías disculparte.'},
+    ],
+  },
+
+  futuro_continuo: {
+    esName: 'Presente continuo con valor de futuro (planes ya organizados)',
+    structure: [
+      {label:'Afirmativa', formula:'Sujeto + am/is/are + verbo-ing + expresión de tiempo futuro',
+       note:'Se usa para hablar de planes y citas ya organizadas para el futuro, casi siempre con fecha, hora o persona ya decididas.',
+       example:{en:'I am meeting Ana at 5 p.m. tomorrow.', es:'Voy a ver a Ana mañana a las 5 p.m. (ya quedamos).'}},
+      {label:'Negativa', formula:"Sujeto + am not/isn't/aren't + verbo-ing + expresión de tiempo futuro",
+       note:'"Not" va después del verbo to be, igual que en el presente continuo normal.',
+       example:{en:"We aren't traveling next week.", es:'No vamos a viajar la próxima semana (el plan cambió).'}},
+      {label:'Pregunta', formula:'Am/Is/Are + sujeto + verbo-ing + expresión de tiempo futuro...?',
+       note:'Se pregunta sobre planes ya hechos, no sobre predicciones generales (para eso se usa "will").',
+       example:{en:'Are you coming to the party on Saturday?', es:'¿Vas a venir a la fiesta el sábado? (¿ya lo decidiste?)'}},
+    ],
+    examples: [
+      {en:"She is starting her new job on Monday.", es:'Ella empieza su nuevo trabajo el lunes.'},
+      {en:'What are you doing this weekend?', es:'¿Qué vas a hacer este fin de semana?'},
+      {en:"I'm not working tomorrow, it's a holiday.", es:'No voy a trabajar mañana, es día festivo.'},
+    ],
+    signals: ['tomorrow','next week','on Friday','this weekend','at 5 p.m.'],
+  },
+
+  have_to: {
+    esName: '"Have to" — obligación impuesta por reglas o circunstancias externas',
+    structure: [
+      {label:'Afirmativa', formula:'Sujeto + have/has to + verbo base',
+       note:'"Have" se usa con I/you/we/they; "has" con he/she/it. Expresa una obligación que viene de una regla o circunstancia, no de la opinión del hablante (a diferencia de "must").',
+       example:{en:'She has to wear a uniform at school.', es:'Ella tiene que usar uniforme en la escuela.'}},
+      {label:'Negativa', formula:"Sujeto + don't/doesn't have to + verbo base",
+       note:'Esto NO significa prohibición, significa que algo no es necesario. Para prohibir se usa "must not / can\'t".',
+       example:{en:"You don't have to bring your book, I have an extra one.", es:'No es necesario que traigas tu libro, tengo uno extra.'}},
+      {label:'Pregunta', formula:'Do/Does + sujeto + have to + verbo base...?',
+       note:'Como "have to" no es un modal, necesita el auxiliar do/does en preguntas y negativos, a diferencia de "must".',
+       example:{en:'Do you have to work on Saturdays?', es:'¿Tienes que trabajar los sábados?'}},
+    ],
+    examples: [
+      {en:'We have to leave early tomorrow.', es:'Tenemos que salir temprano mañana.'},
+      {en:"He doesn't have to ask for permission.", es:'Él no tiene que pedir permiso.'},
+      {en:'Do students have to wear a uniform?', es:'¿Los estudiantes tienen que usar uniforme?'},
+    ],
+    signals: ['a rule says...','it\'s necessary','it\'s not necessary','school policy','the law'],
+  },
+
+  compounds: {
+    esName: 'Compuestos de some-, any- y no- (persona, lugar y cosa)',
+    structure: [
+      {label:'Some-', formula:'someone/somebody, something, somewhere',
+       note:'Se usan en oraciones afirmativas, y también en ofrecimientos o peticiones corteses.',
+       example:{en:'There is someone at the door.', es:'Hay alguien en la puerta.'}},
+      {label:'Any-', formula:'anyone/anybody, anything, anywhere',
+       note:'Se usan en preguntas y en oraciones negativas.',
+       example:{en:"I don't have anything to do.", es:'No tengo nada que hacer.'}},
+      {label:'No-', formula:'no one/nobody, nothing, nowhere',
+       note:'Ya tienen significado negativo por sí solas, por eso van con el verbo en afirmativo (nunca junto con "not").',
+       example:{en:'Nobody called me yesterday.', es:'Nadie me llamó ayer.'}},
+    ],
+    examples: [
+      {en:'Would you like something to drink?', es:'¿Quieres algo de tomar?'},
+      {en:'Is there anyone here who speaks English?', es:'¿Hay alguien aquí que hable inglés?'},
+      {en:'I looked everywhere but found it nowhere.', es:'Busqué en todas partes pero no lo encontré en ningún lado.'},
+    ],
+    signals: ['someone','anyone','no one','somewhere','anywhere','nowhere','something','anything','nothing'],
+  },
+
+  verb_ing_base: {
+    esName: 'Verbo + -ing (gerundio) vs. verbo en forma base o infinitivo',
+    structure: [
+      {label:'+ -ing', formula:'enjoy / like / love / hate / mind / finish / keep + verbo-ing',
+       note:'Estos verbos siempre van seguidos de otro verbo en forma -ing, funcionando casi como un sustantivo.',
+       example:{en:'I enjoy playing soccer.', es:'Disfruto jugar futbol.'}},
+      {label:'+ forma base', formula:'can / could / must / should / will + verbo base',
+       note:'Después de un verbo modal, el siguiente verbo siempre va en su forma base, sin "to" y sin -ing.',
+       example:{en:'You should drink more water.', es:'Deberías tomar más agua.'}},
+      {label:'+ to + base', formula:'want / need / decide / plan / hope + to + verbo base',
+       note:'Otro grupo de verbos va seguido de "to" más el verbo en forma base (infinitivo), ni -ing ni forma base sola.',
+       example:{en:'I want to travel to Japan.', es:'Quiero viajar a Japón.'}},
+    ],
+    examples: [
+      {en:'She finished doing her homework.', es:'Ella terminó de hacer su tarea.'},
+      {en:'We can meet tomorrow.', es:'Podemos vernos mañana.'},
+      {en:'They decided to stay home.', es:'Decidieron quedarse en casa.'},
+    ],
+    signals: ['enjoy','like','can','must','want to','decide to'],
+  },
+
+  countable_uncountable: {
+    esName: 'Sustantivos contables e incontables',
+    structure: [
+      {label:'Contables', formula:'a/an + sustantivo singular; sustantivo + s/es en plural',
+       note:'Se pueden contar uno por uno. Usan a/an en singular y tienen forma plural. Se preguntan con "How many...?"',
+       example:{en:'I have three apples.', es:'Tengo tres manzanas.'}},
+      {label:'Incontables', formula:'sustantivo (sin plural, sin a/an)',
+       note:'No se pueden separar en unidades individuales (líquidos, materiales, ideas). Van siempre en singular y se preguntan con "How much...?"',
+       example:{en:"There isn't much water in the bottle.", es:'No hay mucha agua en la botella.'}},
+      {label:'Para medir', formula:'a piece / a glass / a bowl / a bottle of + incontable',
+       note:'Se usan expresiones de cantidad para poder contar sustantivos incontables.',
+       example:{en:'Can I have a glass of water?', es:'¿Me das un vaso de agua?'}},
+    ],
+    examples: [
+      {en:'How many books did you read?', es:'¿Cuántos libros leíste?'},
+      {en:'How much money do you have?', es:'¿Cuánto dinero tienes?'},
+      {en:'She gave me a piece of advice.', es:'Ella me dio un consejo.'},
+    ],
+    signals: ['water','money','rice','information','a piece of...','a glass of...'],
+  },
+
+  a_lot_much_many: {
+    esName: '"A lot of", "much", "many" y las preguntas de cantidad',
+    structure: [
+      {label:'Many', formula:'many + sustantivo contable plural',
+       note:'Se usa sobre todo en preguntas y oraciones negativas con sustantivos contables.',
+       example:{en:"I don't have many friends here.", es:'No tengo muchos amigos aquí.'}},
+      {label:'Much', formula:'much + sustantivo incontable',
+       note:'Se usa sobre todo en preguntas y negativos con sustantivos incontables.',
+       example:{en:"There isn't much time left.", es:'No queda mucho tiempo.'}},
+      {label:'A lot of / lots of', formula:'a lot of / lots of + contable o incontable',
+       note:'Funciona con ambos tipos de sustantivo y es más común en oraciones afirmativas.',
+       example:{en:'She has a lot of books.', es:'Ella tiene muchos libros.'}},
+    ],
+    examples: [
+      {en:'How many students are in your class?', es:'¿Cuántos estudiantes hay en tu clase?'},
+      {en:'How much sugar do you want?', es:'¿Cuánta azúcar quieres?'},
+      {en:'We have a lot of homework today.', es:'Tenemos mucha tarea hoy.'},
+    ],
+    signals: ['how many...?','how much...?','a lot of','lots of'],
+  },
+
+  comparative_superlative: {
+    esName: 'Adjetivos comparativos y superlativos',
+    structure: [
+      {label:'Cortos (1 sílaba)', formula:'adjetivo + er (comparativo) / the + adjetivo + est (superlativo)',
+       note:'Si el adjetivo termina en consonante-vocal-consonante, se duplica la última consonante antes de agregar -er/-est (big → bigger → biggest).',
+       example:{en:'This book is longer than that one.', es:'Este libro es más largo que ese.'}},
+      {label:'2 sílabas en -y', formula:'cambia "y" por "i" + er/est',
+       note:'Ejemplo: happy → happier → the happiest; easy → easier → the easiest.',
+       example:{en:'She is happier than before.', es:'Ella está más feliz que antes.'}},
+      {label:'Largos (2+ sílabas)', formula:'more + adjetivo (comparativo) / the most + adjetivo (superlativo)',
+       note:'La mayoría de los adjetivos de dos o más sílabas usan "more/most" en lugar de -er/-est.',
+       example:{en:'This phone is more expensive than mine.', es:'Este teléfono es más caro que el mío.'}},
+      {label:'Irregulares', formula:'good → better → the best; bad → worse → the worst; far → farther/further → the farthest/furthest',
+       note:'Estos adjetivos no siguen ninguna regla, hay que memorizarlos.',
+       example:{en:'This is the best day of my life.', es:'Este es el mejor día de mi vida.'}},
+    ],
+    examples: [
+      {en:'My sister is taller than me.', es:'Mi hermana es más alta que yo.'},
+      {en:'This is the most interesting book I have read.', es:'Este es el libro más interesante que he leído.'},
+      {en:'Today is worse than yesterday.', es:'Hoy es peor que ayer.'},
+    ],
+    signals: ['than','the...est','more...than','the most'],
+  },
+};
+
+/* ============ VOCAB DATA ============ */
+const VOCAB_LEVELS = {
+ primero: {
+  welcome: { label: 'Welcome!', hasExam: false, groups: [
+    { name: 'Classroom language', words: [
+      ['book','n','libro'], ['close','v','cerrar'], ['listen','v','escuchar'], ['look','v','mirar'],
+      ['open','v','abrir'], ['read','v','leer'], ['sit down','phr','sentarse'], ['talk','v','hablar'], ['write','v','escribir'],
+    ]},
+    { name: 'Other words', words: [
+      ['dictionary','n','diccionario'], ['email','n','correo electrónico'], ['page','n','página'],
+      ['partner','n','compañero/a'], ['restroom','n','baño'], ['song','n','canción'],
+    ]},
+    { name: 'Numbers', words: [
+      ['zero','num','cero'], ['one','num','uno'], ['two','num','dos'], ['three','num','tres'], ['four','num','cuatro'],
+      ['five','num','cinco'], ['six','num','seis'], ['seven','num','siete'], ['eight','num','ocho'], ['nine','num','nueve'],
+      ['ten','num','diez'], ['eleven','num','once'], ['twelve','num','doce'], ['thirteen','num','trece'],
+      ['fourteen','num','catorce'], ['fifteen','num','quince'], ['sixteen','num','dieciséis'], ['seventeen','num','diecisiete'],
+      ['eighteen','num','dieciocho'], ['nineteen','num','diecinueve'], ['twenty','num','veinte'], ['twenty-one','num','veintiuno'],
+      ['thirty','num','treinta'], ['forty','num','cuarenta'], ['fifty','num','cincuenta'], ['sixty','num','sesenta'],
+      ['seventy','num','setenta'], ['eighty','num','ochenta'], ['ninety','num','noventa'], ['one hundred','num','cien'],
+    ]},
+    { name: 'School things', words: [
+      ['backpack','n','mochila'], ['black','adj','negro'], ['blue','adj','azul'], ['board','n','pizarrón'],
+      ['brown','adj','café / marrón'], ['calculator','n','calculadora'], ['chair','n','silla'], ['clock','n','reloj de pared'],
+      ['colored pencils','n','colores / lápices de colores'], ['desk','n','escritorio / pupitre'], ['door','n','puerta'],
+      ['eraser','n','borrador'], ['gray','adj','gris'], ['laptop','n','laptop'], ['magic marker','n','marcador'],
+      ['notebook','n','cuaderno'], ['orange','adj','naranja'], ['pen','n','pluma'], ['pencil','n','lápiz'],
+      ['pencil case','n','estuche'], ['pencil sharpener','n','sacapuntas'], ['pink','adj','rosa'], ['purple','adj','morado'],
+      ['red','adj','rojo'], ['ruler','n','regla'], ['textbook','n','libro de texto'], ['white','adj','blanco'], ['yellow','adj','amarillo'],
+    ]},
+    { name: 'Days and months', words: [
+      ['Monday','n','lunes'], ['Tuesday','n','martes'], ['Wednesday','n','miércoles'], ['Thursday','n','jueves'],
+      ['Friday','n','viernes'], ['Saturday','n','sábado'], ['Sunday','n','domingo'], ['January','n','enero'],
+      ['February','n','febrero'], ['March','n','marzo'], ['April','n','abril'], ['May','n','mayo'], ['June','n','junio'],
+      ['July','n','julio'], ['August','n','agosto'], ['September','n','septiembre'], ['October','n','octubre'],
+      ['November','n','noviembre'], ['December','n','diciembre'],
+    ]},
+    { name: 'Other words', words: [
+      ['birthday','n','cumpleaños'], ['fall','n','otoño'], ['favorite','n','favorito'], ['season','n','estación del año'],
+      ['spring','n','primavera'], ['summer','n','verano'], ['winter','n','invierno'],
+    ]},
+    { name: 'Countries and nationalities', words: [
+      ['Australia','n','Australia'], ['Australian','adj','australiano/a'], ['Brazil','n','Brasil'], ['Brazilian','adj','brasileño/a'],
+      ['Canada','n','Canadá'], ['Canadian','adj','canadiense'], ['Chile','n','Chile'], ['Chilean','adj','chileno/a'],
+      ['China','n','China'], ['Chinese','adj','chino/a'], ['Japan','n','Japón'], ['Japanese','adj','japonés/japonesa'],
+      ['Mexico','n','México'], ['Mexican','adj','mexicano/a'], ['Portugal','n','Portugal'], ['Portuguese','adj','portugués/portuguesa'],
+      ['Spain','n','España'], ['Spanish','adj','español/española'], ['the U.K.','n','el Reino Unido'], ['British','adj','británico/a'],
+      ['the U.S.','n','Estados Unidos'], ['American','adj','estadounidense'], ['Türkiye','n','Turquía'], ['Turkish','adj','turco/a'],
+    ]},
+    { name: 'Parts of the body', words: [
+      ['arm','n','brazo'], ['ear','n','oreja'], ['eye','n','ojo'], ['finger','n','dedo de la mano'],
+      ['foot / feet','n','pie / pies'], ['hair','n','cabello'], ['hand','n','mano'], ['have','v','tener'],
+      ['leg','n','pierna'], ['mouth','n','boca'], ['nose','n','nariz'], ['shoulder','n','hombro'], ['toe','n','dedo del pie'],
+    ]},
+  ]},
+
+  unit1: { label: 'Unit 1', hasExam: true, groups: [
+    { name: 'School subjects', words: [
+      ['art','n','arte'], ['computer studies','n','computación'], ['design and technology','n','diseño y tecnología'],
+      ['drama','n','teatro'], ['English','n','inglés'], ['geography','n','geografía'], ['history','n','historia'],
+      ['mathematics','n','matemáticas'], ['music','n','música'], ['physical education','n','educación física'], ['science','n','ciencias'],
+    ]},
+    { name: 'Other words', words: [
+      ['a fan of','phr','fanático/a de'], ['actor','n','actor'], ['address','n','dirección'], ['afternoon','n','tarde'],
+      ['age','n','edad'], ['band','n','banda musical'], ['best friend','n','mejor amigo/a'], ['big sister','n','hermana mayor'],
+      ['city','n','ciudad'], ['communicate','v','comunicarse'], ['confident','adj','seguro/a de sí mismo'], ['cool','adj','genial'],
+      ['dance','v','bailar'], ['dancer','n','bailarín/bailarina'], ['drawing','n','dibujo'], ['evening','n','tarde-noche'],
+      ['everyday','adj','de todos los días'], ['excellent','adj','excelente'], ['famous','adj','famoso/a'], ['fantastic','adj','fantástico/a'],
+      ['fine','adj','bien'], ['first language','n','lengua materna'], ['formal','adj','formal'], ['friend','n','amigo/a'],
+      ['friendly','adj','amigable'], ['good','adj','bueno/a'], ['grade','n','grado / calificación'], ['great','adj','estupendo/a'],
+      ['group','n','grupo'], ['here','adv','aquí'], ['hero','n','héroe'], ['hometown','n','ciudad natal'], ['improve','v','mejorar'],
+      ['informal','adj','informal'], ['interesting','adj','interesante'], ['international','adj','internacional'], ['later','adv','más tarde'],
+      ['little','adj','pequeño / poco'], ['monument','n','monumento'], ['morning','n','mañana'], ['next','adj','siguiente'],
+      ['nice','adj','agradable'], ['not bad','phr','no está mal'], ['now','adv','ahora'], ['politics','n','política'],
+      ['practice','v','practicar'], ['president','n','presidente'], ['same','adj','mismo/igual'], ['see','v','ver'],
+      ['shy','adj','tímido/a'], ['singer','n','cantante'], ['story','n','historia / cuento'], ['student','n','estudiante'],
+      ['subject','n','materia'], ['surfing','n','surf'], ['teacher','n','maestro/a'], ['today','adv','hoy'], ['together','adv','juntos'],
+      ['town','n','pueblo'], ['twin','n','gemelo/a'], ['watch','v','ver / observar'], ['weekend','n','fin de semana'],
+      ['weather','n','clima'], ['well','adv','bien'],
+    ]},
+  ]},
+
+  unit2: { label: 'Unit 2', hasExam: true, groups: [
+    { name: 'Family', words: [
+      ['aunt','n','tía'], ['brother','n','hermano'], ['cousin','n','primo/a'], ['dad','n','papá'], ['grandma','n','abuela'],
+      ['grandpa','n','abuelo'], ['grandparents','n','abuelos'], ['mom','n','mamá'], ['parents','n','padres'],
+      ['sister','n','hermana'], ['uncle','n','tío'],
+    ]},
+    { name: 'Ordinal numbers', words: [
+      ['first','num','primero'], ['second','num','segundo'], ['third','num','tercero'], ['fifth','num','quinto'],
+      ['eighth','num','octavo'], ['ninth','num','noveno'], ['twelfth','num','duodécimo'], ['twentieth','num','vigésimo'],
+      ['twenty-first','num','vigésimo primero'],
+    ]},
+    { name: 'Other words', words: [
+      ['angry','adj','enojado/a'], ['average','adj','promedio'], ['block','v','bloquear'], ['ball','n','pelota'],
+      ['boy','n','niño'], ['busy','adj','ocupado/a'], ['calm','adj','tranquilo/a'], ['capital','adj','capital'],
+      ['car','n','carro'], ['chat','v','platicar'], ['class','n','clase'], ['computer lab','n','laboratorio de computación'],
+      ['family member','n','miembro de la familia'], ['fact','n','dato / hecho'], ['funny','adj','gracioso/a'],
+      ['happy','adj','feliz'], ['happen','v','suceder'], ['important','adj','importante'], ['late','adj','tarde'],
+      ['laugh','v','reírse'], ['meet','v','conocer / reunirse'], ['movie','n','película'], ['neighbor','n','vecino/a'],
+      ['noisy','adj','ruidoso/a'], ['people','n','gente / personas'], ['pie','n','pay / pastel'], ['polite','adj','cortés'],
+      ['quiz','n','cuestionario'], ['say','v','decir'], ['solution','n','solución'], ['special','adj','especial'],
+      ['sport','n','deporte'], ['stay in touch','phr','mantenerse en contacto'], ['step-','prefix','prefijo: -astro/-astra (ej. stepbrother = hermanastro)'],
+      ['test','n','examen'], ['the last','phr','el último'], ['thing','n','cosa'], ['tradition','n','tradición'],
+      ['wait and see','phr','esperar y ver'],
+    ]},
+  ]},
+
+  unit3: { label: 'Unit 3', hasExam: true, groups: [
+    { name: 'House and furniture', words: [
+      ['apartment','n','departamento'], ['armchair','n','sillón'], ['backyard','n','patio trasero'], ['bathroom','n','baño'],
+      ['bathtub','n','tina'], ['bed','n','cama'], ['bedroom','n','recámara'], ['bookcase','n','librero'], ['couch','n','sofá'],
+      ['dining room','n','comedor'], ['floor','n','piso'], ['fridge','n','refrigerador'], ['hallway','n','pasillo'],
+      ['kitchen','n','cocina'], ['lamp','n','lámpara'], ['living room','n','sala'], ['mirror','n','espejo'],
+      ['painting','n','pintura / cuadro'], ['poster','n','póster'], ['shelf / shelves','n','repisa / repisas'],
+      ['shower','n','regadera'], ['sink','n','lavabo / fregadero'], ['stairs','n','escaleras'], ['stove','n','estufa'],
+      ['table','n','mesa'], ['toilet','n','excusado'], ['wall','n','pared'], ['wardrobe','n','armario'],
+      ['washing machine','n','lavadora'], ['window','n','ventana'],
+    ]},
+    { name: 'Other words', words: [
+      ['across from','phr','enfrente de'], ['baby','n','bebé'], ['behind','prep','detrás de'], ['between','prep','entre'],
+      ['building','n','edificio'], ['child / children','n','niño / niños'], ['clean','adj','limpio/a'], ['clothes','n','ropa'],
+      ['come over','phr','venir de visita'], ['correct','adj','correcto/a'], ['difficult','adj','difícil'], ['dirty','adj','sucio/a'],
+      ['downstairs','adv','planta baja'], ['elevator','n','elevador'], ['exercise','n','ejercicio'], ['game','n','juego'],
+      ['games room','n','sala de juegos'], ['girl','n','niña'], ['half','n','mitad'], ['hang out','phr','pasar el rato'],
+      ['healthy','adj','saludable'], ['in','prep','en / dentro de'], ['in front of','prep','enfrente de'], ['letter','n','carta / letra'],
+      ['mess','n','desorden'], ['minute','n','minuto'], ['neat','adj','ordenado/a'], ['near','adv','cerca'],
+      ['next to','phr','junto a'], ['on','prep','sobre'], ['one thousand','num','mil'], ['online','adv','en línea'],
+      ['other','adj','otro/a'], ['party','n','fiesta'], ['person','n','persona'], ['quickly','adv','rápidamente'],
+      ['sandwich','n','sándwich'], ['reason','n','razón'], ['second','n','segundo (tiempo)'], ['shape','n','forma'],
+      ['size','n','tamaño'], ['sliding','adj','corrediza/o'], ['small','adj','pequeño/a'], ['space','n','espacio'],
+      ['step','n','escalón / paso'], ['tall','adj','alto/a'], ['there','adv','ahí'], ['under','prep','debajo de'],
+      ['upstairs','adv','planta alta'], ['welcome','adj','bienvenido/a'],
+    ]},
+  ]},
+
+  unit4: { label: 'Unit 4', hasExam: true, groups: [
+    { name: 'My things', words: [
+      ['bike','n','bicicleta'], ['camera','n','cámara'], ['game console','n','consola de videojuegos'], ['guitar','n','guitarra'],
+      ['planner','n','agenda'], ['phone','n','teléfono'], ['skateboard','n','patineta'], ['soccer ball','n','balón de futbol'],
+      ['sunglasses','n','lentes de sol'], ['tablet','n','tableta'],
+    ]},
+    { name: 'Other words', words: [
+      ['bag','n','bolsa'], ['baseball hat','n','gorra de beisbol'], ['be green','phr','cuidar el medio ambiente'],
+      ['cent','n','centavo'], ['change','n','cambio (dinero)'], ['chess','n','ajedrez'], ['color','n','color'],
+      ['come up with','phr','idear / ocurrírsele'], ['do','v','hacer'], ['dollar','n','dólar'], ['expensive','adj','caro/a'],
+      ['food','n','comida'], ['fun','n','diversión'], ['garage','n','garaje'], ['goal','n','meta / gol'], ['hobby','n','pasatiempo'],
+      ['lantern','n','linterna'], ['marble','n','canica'], ['member','n','miembro'], ['no problem','phr','no hay problema'],
+      ['piano','n','piano'], ['poetry book','n','libro de poemas'], ['project','n','proyecto'], ['really','adv','realmente'],
+      ['really into','phr','muy entusiasmado con'], ['receipt','n','recibo'], ['recycling','n','reciclaje'],
+      ['school council','n','consejo estudiantil'], ['shoot','v','disparar / tirar a gol'], ['take','v','tomar / llevar'],
+      ['tomorrow','adv','mañana (día siguiente)'], ['toy','n','juguete'], ['video game','n','videojuego'],
+      ['watch','n','reloj de pulsera'], ['work','n','trabajo'],
+    ]},
+  ]},
+
+  unit5: { label: 'Unit 5', hasExam: true, groups: [
+    { name: 'Daily routines', words: [
+      ['chat online','phr','platicar en línea'], ['do my homework','phr','hacer mi tarea'], ['finish school','phr','terminar la escuela'],
+      ['get dressed','phr','vestirse'], ['get home','phr','llegar a casa'], ['get up','phr','levantarse'], ['go to bed','phr','ir a dormir'],
+      ['have breakfast','phr','desayunar'], ['have dinner','phr','cenar'], ['have lunch','phr','comer / almorzar'],
+      ['start school','phr','empezar la escuela'], ['take a shower','phr','bañarse'], ['watch TV','phr','ver la tele'],
+      ['use the computer','phr','usar la computadora'],
+    ]},
+    { name: 'Other words', words: [
+      ['always','adv','siempre'], ['boarding school','n','internado'], ['bus','n','autobús'], ['cafeteria','n','cafetería'],
+      ['catch','v','atrapar'], ['classical','adj','clásico/a'], ['go','v','ir'], ['hate','v','odiar'], ['help','v','ayudar'],
+      ['hour','n','hora'], ['housework','n','quehaceres del hogar'], ['hungry','adj','con hambre'], ['instead','adv','en cambio'],
+      ['junior high','n','secundaria'], ['know','v','saber / conocer'], ['learn','v','aprender'], ["let's compare",'phr','comparemos'],
+      ['like','v','gustar'], ['live','v','vivir'], ['long','adj','largo/a'], ['make','v','hacer'], ['never','adv','nunca'],
+      ['often','adv','frecuentemente'], ['photography','n','fotografía'], ['play','v','jugar'], ['probably','adv','probablemente'],
+      ['rarely','adv','rara vez'], ['recess','n','recreo'], ['relax','v','relajarse'], ['rural','adj','rural'],
+      ['schedule','n','horario'], ['school uniform','n','uniforme escolar'], ['snack','n','refrigerio'], ['sometimes','adv','a veces'],
+      ['speak','v','hablar'], ['sorry','adj','lo siento'], ['stop','v','parar'], ['study','v','estudiar'], ['teach','v','enseñar'],
+      ['then','adv','luego / entonces'], ['tired','adj','cansado/a'], ['usually','adv','usualmente'], ['visit','v','visitar'],
+      ['work','v','trabajar'], ['worried','adj','preocupado/a'],
+    ]},
+  ]},
+
+  unit6: { label: 'Unit 6', hasExam: true, groups: [
+    { name: 'Food and drink', words: [
+      ['apple','n','manzana'], ['banana','n','plátano'], ['bread','n','pan'], ['carrots','n','zanahorias'], ['cheese','n','queso'],
+      ['chicken','n','pollo'], ['corn','n','maíz'], ['dairy products','n','lácteos'], ['drink','n','bebida'], ['eggs','n','huevos'],
+      ['fish','n','pescado'], ['fries','n','papas fritas'], ['fruit','n','fruta'], ['grapes','n','uvas'], ['ham','n','jamón'],
+      ['ice cream','n','helado'], ['meat','n','carne'], ['milk','n','leche'], ['orange juice','n','jugo de naranja'],
+      ['peach','n','durazno'], ['pear','n','pera'], ['peas','n','chícharos'], ['potato chips','n','papas fritas de bolsa'],
+      ['potatoes','n','papas'], ['salad','n','ensalada'], ['salmon','n','salmón'], ['soda','n','refresco'], ['sugar','n','azúcar'],
+      ['tomatoes','n','jitomates'], ['tuna','n','atún'], ['vegetables','n','verduras'], ['water','n','agua'],
+    ]},
+    { name: 'Other words', words: [
+      ['also','adv','también'], ['ant','n','hormiga'], ['award','n','premio'], ['beetle','n','escarabajo'], ['buy','v','comprar'],
+      ['cake','n','pastel'], ['carbohydrate','n','carbohidrato'], ['caterpillar','n','oruga'], ['center','n','centro'],
+      ['chocolate','n','chocolate'], ['common','adj','común'], ['course','n','platillo / curso'], ['curry','n','curry'],
+      ['dairy','n','lácteo'], ['delicious','adj','delicioso/a'], ['energy','n','energía'], ['finally','adv','finalmente'],
+      ['flavor','n','sabor'], ['German','n','alemán (idioma)'], ['ingredients','n','ingredientes'], ['Italian','adj','italiano/a'],
+      ['menu','n','menú'], ['once','adv','una vez'], ['only','adv','solamente'], ['protein','n','proteína'], ['recipe','n','receta'],
+      ['restaurant','n','restaurante'], ['spicy','adj','picante'], ['stew','n','guisado'], ['sugary foods','n','alimentos azucarados'],
+      ['sweet','adj','dulce'], ['swim','v','nadar'], ['talent','n','talento'], ['taste','v','probar / saborear'],
+      ['traditional','adj','tradicional'], ['twice','adv','dos veces'], ['unusual','adj','poco común'], ['vegan','n','vegano/a'],
+      ['vegetarian','n','vegetariano/a'], ['world','n','mundo'],
+    ]},
+  ]},
+
+  unit7: { label: 'Unit 7', hasExam: true, groups: [
+    { name: 'Sports', words: [
+      ['baseball','n','béisbol'], ['basketball','n','basquetbol'], ['climbing','n','escalada'], ['field hockey','n','hockey sobre césped'],
+      ['gymnastics','n','gimnasia'], ['karate','n','karate'], ['skiing','n','esquí'], ['soccer','n','futbol'],
+      ['swimming','n','natación'], ['tennis','n','tenis'], ['track and field','n','atletismo'], ['volleyball','n','voleibol'],
+    ]},
+    { name: 'Other words', words: [
+      ['amazing','adj','increíble'], ['Arabic','n','árabe (idioma)'], ['awful','adj','horrible'], ['brake','n','freno'],
+      ['bring','v','traer'], ['can','v','poder'], ['captain','n','capitán/a'], ['careful','adj','cuidadoso/a'],
+      ['champion','n','campeón/campeona'], ['compete','v','competir'], ['concert','n','concierto'], ['count','v','contar'],
+      ['court','n','cancha'], ['draw','v','dibujar'], ['drive','v','manejar'], ['driver','n','conductor/a'], ['early','adv','temprano'],
+      ['easy','adj','fácil'], ['end','n','final'], ['fashion','n','moda'], ['fast','adv','rápido'], ['fluent','adj','fluido/a'],
+      ['fun run','n','carrera recreativa'], ['hard','adv','duro / mucho'], ['match','n','partido'], ['medal','n','medalla'],
+      ['popular','adj','popular'], ['pretty','adv','bastante'], ['net','n','red'], ['new','adj','nuevo/a'], ['remember','v','recordar'],
+      ['represent','v','representar'], ['ride','v','andar en (bici, etc.)'], ['run','v','correr'], ['safe','adj','seguro/a'],
+      ['score','v','anotar'], ['sell','v','vender'], ['shy','adj','tímido/a'], ['show','n','espectáculo'], ['sing','v','cantar'],
+      ['ski','v','esquiar'], ['slow','adj','lento/a'], ['theme','n','tema'], ['touch','v','tocar'], ['translator','n','traductor/a'],
+    ]},
+  ]},
+
+  unit8: { label: 'Unit 8', hasExam: true, groups: [
+    { name: 'Clothes', words: [
+      ['baseball hat','n','gorra de beisbol'], ['boots','n','botas'], ['coat','n','abrigo'], ['dress','n','vestido'],
+      ['hat','n','sombrero'], ['hoodie','n','sudadera con capucha'], ['jacket','n','chamarra'], ['jeans','n','jeans'],
+      ['leggings','n','mallas'], ['pants','n','pantalones'], ['scarf','n','bufanda'], ['shirt','n','camisa'], ['shoes','n','zapatos'],
+      ['shorts','n','shorts'], ['skirt','n','falda'], ['sneakers','n','tenis'], ['sweater','n','suéter'], ['T-shirt','n','playera'],
+      ['top','n','blusa'],
+    ]},
+    { name: 'Other words', words: [
+      ['cap','n','gorra'], ['company','n','empresa'], ['dress','v','vestir'], ['environment','n','medio ambiente'],
+      ['fitting rooms','n','probadores'], ['get a sunburn','phr','quemarse con el sol'], ['globally','adv','globalmente'],
+      ['good to go','phr','listo para irse'], ['guess','v','adivinar'], ['headband','n','diadema'], ['hold','v','sostener'],
+      ['jersey','n','jersey deportivo'], ['just','adv','solo / apenas'], ['large','adj','grande'], ['latest','adj','más reciente'],
+      ['leave','v','salir / dejar'], ['look your best','phr','verte lo mejor posible'], ['medium','adj','mediano/a'], ['rule','n','regla'],
+      ['second-hand','adj','de segunda mano'], ['shop','v','ir de compras'], ['size','n','talla'], ['to last','phr','durar'],
+      ['too','adv','también / demasiado'], ['try (sth) on','v','probarse (algo)'], ['uniform','n','uniforme'],
+    ]},
+  ]},
+ },
+
+ segundo: {
+  welcome: { label: 'Welcome!', hasExam: false, groups: [
+    { name: 'School subjects', words: [
+      ['art','n','arte'], ['computer studies','n','computación'], ['drama','n','teatro'], ['English','n','inglés'],
+      ['geography','n','geografía'], ['history','n','historia'], ['math','n','matemáticas'], ['physical education','n','educación física'],
+    ]},
+    { name: 'Possessions', words: [
+      ['games console','n','consola de videojuegos'], ['planner','n','agenda'], ['skateboard','n','patineta'],
+      ['sunglasses','n','lentes de sol'], ['tablet','n','tableta'],
+    ]},
+    { name: 'House and rooms', words: [
+      ['armchair','n','sillón'], ['backyard','n','patio trasero'], ['bathroom','n','baño'], ['bedroom','n','recámara'],
+      ['dining room','n','comedor'], ['hallway','n','pasillo'], ['kitchen','n','cocina'], ['living room','n','sala'], ['mirror','n','espejo'],
+    ]},
+    { name: 'Other words', words: [
+      ['across from','prep','enfrente de'], ['behind','prep','detrás de'], ['between','prep','entre'], ['in','prep','en / dentro de'],
+      ['in front of','prep','enfrente de'], ['near','adv','cerca'], ['next to','prep','junto a'], ['on','prep','sobre'], ['under','prep','debajo de'],
+    ]},
+    { name: 'Sports activities', words: [
+      ['gymnastics','n','gimnasia'], ['karate','n','karate'], ['skiing','n','esquí'], ['soccer','n','futbol'],
+      ['swimming','n','natación'], ['track and field','n','atletismo'], ['volleyball','n','voleibol'],
+    ]},
+    { name: 'Daily routines', words: [
+      ['do my homework','phr','hacer mi tarea'], ['get home','phr','llegar a casa'], ['get up','phr','levantarse'],
+      ['go to bed','phr','ir a dormir'], ['have breakfast','phr','desayunar'], ['have dinner','phr','cenar'], ['watch TV','phr','ver la tele'],
+    ]},
+    { name: 'Clothes', words: [
+      ['baseball hat','n','gorra de beisbol'], ['boots','n','botas'], ['dress','n','vestido'], ['hoodie','n','sudadera con capucha'],
+      ['jacket','n','chamarra'], ['pants','n','pantalones'], ['scarf','n','bufanda'], ['shirt','n','camisa'], ['shoes','n','zapatos'],
+      ['shorts','n','shorts'], ['skirt','n','falda'],
+    ]},
+    { name: 'Family', words: [
+      ['aunt','n','tía'], ['brother','n','hermano'], ['cousin','n','primo/a'], ['dad','n','papá'], ['grandma','n','abuela'],
+      ['grandpa','n','abuelo'], ['mom','n','mamá'], ['sister','n','hermana'], ['uncle','n','tío'],
+    ]},
+    { name: 'Food', words: [
+      ['banana','n','plátano'], ['bread','n','pan'], ['carrots','n','zanahorias'], ['cheese','n','queso'], ['chicken','n','pollo'],
+      ['corn','n','maíz'], ['eggs','n','huevos'], ['fries','n','papas fritas'], ['grapes','n','uvas'], ['ham','n','jamón'],
+      ['ice cream','n','helado'], ['peas','n','chícharos'], ['salmon','n','salmón'],
+    ]},
+  ]},
+
+  unit1: { label: 'Unit 1', hasExam: true, groups: [
+    { name: 'The weather', words: [
+      ['cloudy','adj','nublado'], ['cold','adj','frío'], ['cool','adj','fresco'], ['degrees','n','grados'],
+      ['freezing','adj','congelado / muy frío'], ['hot','adj','caluroso'], ['rain','v','llover'], ['snow','v','nevar'],
+      ['storm','n','tormenta'], ['sunny','adj','soleado'], ['temperature','n','temperatura'], ['warm','adj','cálido'],
+      ['weather','n','clima'], ['windy','adj','ventoso'],
+    ]},
+    { name: 'Other words', words: [
+      ['accept','v','aceptar'], ['agree','v','estar de acuerdo'], ['arrive (back)','v','regresar / llegar de vuelta'],
+      ['athlete','n','atleta'], ['awesome','adj','increíble'], ['bowling','n','boliche'], ['come (back)','v','volver / regresar'],
+      ['concert','n','concierto'], ['costume','n','disfraz'], ['dentist','n','dentista'], ['downtown','adv','centro de la ciudad'],
+      ['drum','n','tambor'], ['enough','det','suficiente'], ['event','n','evento'], ['festival','n','festival'], ['free','adj','gratis / libre'],
+      ['invite','v','invitar'], ['leave','v','salir / irse'], ['matter','n','asunto / importar'], ['meet','v','conocer / reunirse'],
+      ['might','v','podría (posibilidad)'], ['movie theater','n','cine'], ['need','v','necesitar'],
+      ['northern hemisphere','n','hemisferio norte'], ['outside','adv','afuera'], ['parade','n','desfile'], ['picnic','n','picnic'],
+      ['race','n','carrera'], ['refuse','v','rechazar'], ['right now','adv','ahora mismo'], ['southern hemisphere','n','hemisferio sur'],
+      ['special','adj','especial'], ['spring roll','n','rollo primavera'], ['stay','v','quedarse'], ['traditional','adj','tradicional'],
+      ['trip','n','viaje'], ['unfortunately','adv','desafortunadamente'], ['visit','v','visitar'], ['work','v','trabajar'],
+    ]},
+  ]},
+
+  unit2: { label: 'Unit 2', hasExam: true, groups: [
+    { name: 'Physical appearance', words: [
+      ['average weight','adj','peso promedio'], ['bald','adj','calvo'], ['beard','adj','barba'], ['blond(e)','adj','rubio/a'],
+      ['braces','adj','frenos dentales'], ['curly','adj','rizado/a'], ['long','adj','largo/a'], ['middle-aged','adj','de mediana edad'],
+      ['mustache','n','bigote'], ['old','adj','viejo/a'], ['overweight','adj','con sobrepeso'], ['short','adj','bajo/a de estatura'],
+      ['shoulder-length','adj','hasta los hombros'], ['slim','adj','delgado/a'], ['straight','adj','lacio/a'], ['tall','adj','alto/a'],
+      ['wavy','adj','ondulado/a'], ['young','adj','joven'],
+    ]},
+    { name: 'Other words', words: [
+      ['ago','adv','hace (tiempo)'], ['baby sister','n','hermana bebé'], ['born','v','nacer'], ['bossy','adj','mandón/mandona'],
+      ['bright','adj','brillante / inteligente'], ['celebrity','n','celebridad'], ['easy','adj','fácil'], ['exploring','n','explorando'],
+      ['fame','n','fama'], ['fan','n','fanático/a'], ['fashionable','adj','a la moda'], ['friendly','adj','amigable'],
+      ['hard','adj','difícil'], ['headphones','n','audífonos'], ['hygienic','adj','higiénico/a'], ['indigenous','adj','indígena'],
+      ['lazy','adj','perezoso/a'], ['neck','n','cuello'], ['protect','v','proteger'], ['safely','adv','de manera segura'],
+      ['shy','adj','tímido/a'], ['so','adv','tan / así que'], ['star','n','estrella'], ['strength','n','fuerza'],
+      ['take care of','phr','cuidar de'], ['temple','n','templo'], ['top','adj','máximo / mejor'], ['tour','n','recorrido / gira'],
+      ['tourist','n','turista'], ['use','v','usar'], ['yesterday','adv','ayer'],
+    ]},
+  ]},
+
+  unit3: { label: 'Unit 3', hasExam: true, groups: [
+    { name: 'Places around town', words: [
+      ['bank','n','banco'], ['bookstore','n','librería'], ['bus station','n','central de autobuses'], ['bus stop','n','parada de autobús'],
+      ['café','n','cafetería'], ['hospital','n','hospital'], ['library','n','biblioteca'], ['mall','n','centro comercial'],
+      ['market','n','mercado'], ['movie theater','n','cine'], ['park','n','parque'], ['parking lot','n','estacionamiento'],
+      ['police station','n','estación de policía'], ['post office','n','oficina de correos'], ['sports center','n','centro deportivo'],
+      ['supermarket','n','supermercado'], ['train station','n','estación de tren'],
+    ]},
+    { name: 'Other words', words: [
+      ['across from','prep','enfrente de'], ['air conditioning','n','aire acondicionado'], ['along','prep','a lo largo de'],
+      ['amazing','adj','increíble'], ['area','n','área / zona'], ['around','prep','alrededor de'], ['bake','v','hornear'],
+      ['bicycle lane','n','ciclovía'], ['borrow','v','pedir prestado'], ['build','v','construir'], ['busy','adj','ocupado / con tráfico'],
+      ['call','v','llamar'], ['canal','n','canal'], ['catch','v','atrapar / tomar (transporte)'], ['cereal','n','cereal'],
+      ['colonize','v','colonizar'], ['cook','v','cocinar'], ['copy','v','copiar'], ['council','n','consejo'], ['create','v','crear'],
+      ['cry','v','llorar'], ['cup','n','taza'], ['dangerous','adj','peligroso/a'], ['decide','v','decidir'],
+      ['delicious','adj','delicioso/a'], ['difficult','adj','difícil'], ['east','n','este'], ['end','n','final'],
+      ['enjoy','v','disfrutar'], ['even','adv','incluso'], ['experience','n','experiencia'], ['find','v','encontrar'],
+      ['get married','v','casarse'], ['gift','n','regalo'], ['grid','n','cuadrícula'], ['hate','v','odiar'],
+      ['impossible','adj','imposible'], ['intersection','n','intersección / cruce'], ['jog','v','trotar'], ['left','n','izquierda'],
+      ['live','v','vivir'], ['live entertainment','n','entretenimiento en vivo'], ['north','n','norte'], ['ocean','n','océano'],
+      ['other','adj','otro/a'], ['place','n','lugar'], ['plan','v','planear'], ['prefer','v','preferir'],
+      ['recycling bins','n','contenedores de reciclaje'], ['return','v','regresar'], ['right','n','derecha'], ['sick','adj','enfermo/a'],
+      ['slave','n','esclavo/a'], ['solar panels','n','paneles solares'], ['soon','adv','pronto'], ['stop','v','parar / parada'],
+      ['store','n','tienda'], ['take control','v','tomar el control'], ['taste','v','probar / saborear'], ['teach','v','enseñar'],
+      ['tell','v','decir / contar'], ['theme park','n','parque temático'], ['tidy','v','ordenar'], ['tired','adj','cansado/a'],
+      ['trading','n','comercio'], ['traffic circle','n','glorieta'], ['traffic lights','n','semáforos'], ['train ticket','n','boleto de tren'],
+      ['turn (left/right)','v','dar vuelta (a la izquierda/derecha)'], ['violin','n','violín'], ['walk','v','caminar'], ['want','v','querer'],
+      ['way','n','camino / manera'],
+    ]},
+  ]},
+
+  unit4: { label: 'Unit 4', hasExam: true, groups: [
+    { name: 'Movie types', words: [
+      ['action movie','n','película de acción'], ['animated movie','n','película animada'], ['comedy','n','comedia'],
+      ['fantasy movie','n','película de fantasía'], ['horror movie','n','película de terror'], ['musical','n','musical'],
+      ['romance','n','romance'], ['romcom','n','comedia romántica'], ['sci-fi movie','n','película de ciencia ficción'],
+    ]},
+    { name: 'Other words', words: [
+      ['band','n','banda'], ['big screen','n','pantalla grande'], ['bit','n','un poco / pedacito'], ['break','v','romper'],
+      ['bring','v','traer'], ['building','n','edificio'], ['care','v','importar / cuidar'], ['character','n','personaje'],
+      ['compare','v','comparar'], ['constructive criticism','n','crítica constructiva'], ['control','v','controlar'],
+      ['customer','n','cliente'], ['documentary','n','documental'], ['ending','n','final (de una historia)'], ['entry','n','entrada'],
+      ['far','adv','lejos'], ['feed','v','alimentar'], ['fossil fuel','n','combustible fósil'], ['full','adj','lleno/a'],
+      ['grade','n','calificación'], ['hang out','v','pasar el rato'], ['hear','v','escuchar / oír'], ['late/later','adv','tarde / más tarde'],
+      ['line','n','fila / línea'], ['letter','n','carta / letra'], ['local','adj','local'], ['money','n','dinero'],
+      ['monster','n','monstruo'], ['negative','adj','negativo/a'], ['oil','n','petróleo / aceite'], ['online','adv','en línea'],
+      ['pass','v','pasar'], ['plot','n','trama'], ['police officer','n','oficial de policía'], ['popcorn','n','palomitas'],
+      ['recommend','v','recomendar'], ['ride','n','atracción (juego mecánico)'], ['robot','n','robot'],
+      ['roller coaster','n','montaña rusa'], ['rubbish','adj','basura / malo (informal)'], ['sandwich','n','sándwich'],
+      ['scene','n','escena'], ['screen','n','pantalla'], ['script','n','guion'], ['scuba diving','n','buceo'], ['send','v','enviar'],
+      ['sleep','v','dormir'], ['special effects','n','efectos especiales'], ['spoiler','n','revelación de trama'], ['square','n','plaza'],
+      ['stadium','n','estadio'], ['stand','v','pararse / soportar'], ['story','n','historia'], ['studio','n','estudio'],
+      ['subtitle','n','subtítulo'], ['surprise','n','sorpresa'], ['survey','n','encuesta'], ['swimming pool','n','alberca'],
+      ['twice','adv','dos veces'], ['type','n','tipo'], ['waterpark','n','parque acuático'], ['win','v','ganar'], ['world','n','mundo'],
+    ]},
+  ]},
+
+  unit5: { label: 'Unit 5', hasExam: true, groups: [
+    { name: 'Housework', words: [
+      ['clean my (bed)room','phr','limpiar mi cuarto'], ['clean the bathroom','phr','limpiar el baño'],
+      ['cook meals','phr','cocinar comidas'], ['do the dishes','phr','lavar los trastes'], ['do the laundry','phr','lavar la ropa'],
+      ['do the vacuuming','phr','aspirar'], ['iron','v','planchar'], ['load / unload the dishwasher','phr','cargar / vaciar el lavavajillas'],
+      ['make my bed','phr','tender mi cama'], ['set / clear the table','phr','poner / quitar la mesa'],
+      ['take out the trash','phr','sacar la basura'],
+    ]},
+    { name: 'Other words', words: [
+      ['attractive','adj','atractivo/a'], ['available','adj','disponible'], ['camp','n','campamento'], ['chores','n','quehaceres'],
+      ['clear','adj','claro / despejado'], ['coach','n','entrenador/a'], ['collect','v','coleccionar / recolectar'],
+      ['contact','v','contactar'], ['convert','v','convertir'], ['creepy','adj','espeluznante'], ['design','n','diseño'],
+      ["don't need to lift a finger",'phr','no necesitas mover un dedo'], ['exist','v','existir'], ['font','n','tipo de letra'],
+      ['job','n','trabajo / empleo'], ['heading','n','encabezado'], ['hungry','adj','con hambre'], ['image','n','imagen'],
+      ['last','v','durar'], ['link','n','enlace'], ['map','n','mapa'], ['mess','n','desorden'], ['missing','adj','perdido / faltante'],
+      ['neighbor','n','vecino/a'], ['permission','n','permiso'], ['poor','adj','pobre'], ['principal','n','director/a de escuela'],
+      ['recipe','n','receta'], ['remember','v','recordar'], ['schedule','n','horario'], ['sell','v','vender'],
+      ['shopping list','n','lista de compras'], ['spend','v','gastar'], ['sorry','adj','lo siento'], ['strange','adj','extraño/a'],
+      ['turn off','v','apagar'], ['wood','n','madera'],
+    ]},
+  ]},
+
+  unit6: { label: 'Unit 6', hasExam: true, groups: [
+    { name: 'Transportation and travel', words: [
+      ['bicycle','n','bicicleta'], ['bus','n','autobús'], ['car','n','carro'], ['ferry','n','transbordador'],
+      ['go (by)','phr','ir (en algún transporte)'], ['helicopter','n','helicóptero'], ['motorcycle','n','motocicleta'],
+      ['pickup truck','n','camioneta'], ['plane','n','avión'], ['scooter','n','scooter'], ['streetcar','n','tranvía'],
+      ['subway','n','metro'], ['taxi','n','taxi'], ['train','n','tren'], ['travel (by)','phr','viajar (en algún transporte)'], ['truck','n','camión'],
+    ]},
+    { name: 'Other words', words: [
+      ['abandon','v','abandonar'], ['airport','n','aeropuerto'], ['already','adv','ya'], ['amusement park','n','parque de diversiones'],
+      ['attraction','n','atracción'], ['baggage','n','equipaje'], ['beach','n','playa'], ['bottle','n','botella'],
+      ['busiest','adj','el más concurrido'], ['carry','v','cargar / llevar'], ['check in','v','registrarse / documentar equipaje'],
+      ['check-in counter','n','mostrador de registro'], ['cheap','adj','barato/a'], ['college','n','universidad'],
+      ['company','n','empresa'], ['contactless card','n','tarjeta sin contacto'], ['cross','v','cruzar'], ['culture','n','cultura'],
+      ['dangerous','adj','peligroso/a'], ['departure','n','salida'], ['document','n','documento'], ['drive','v','manejar'],
+      ['electricity','n','electricidad'], ['elevated','adj','elevado/a'], ['example','n','ejemplo'], ['exercise','n','ejercicio'],
+      ['fly','v','volar'], ['forget','v','olvidar'], ['form','n','formulario'], ['gate','n','puerta de embarque'],
+      ['get off','v','bajarse (de un transporte)'], ['habit','n','hábito'], ['hope','v','esperar (desear)'],
+      ['identity card','n','identificación'], ['imagine','v','imaginar'], ['itinerary','n','itinerario'], ['medal','n','medalla'],
+      ['meeting','n','reunión'], ['millionaire','n','millonario/a'], ['mountain','n','montaña'], ['not mind','v','no importarle'],
+      ['offer','v','ofrecer'], ['one-way ticket','n','boleto sencillo'], ['option','n','opción'], ['passport','n','pasaporte'],
+      ['pay attention','v','poner atención'], ['polite','adj','cortés'], ['postcard','n','postal'], ['potential','n','potencial'],
+      ['price','n','precio'], ['public','adj','público/a'], ['quiet','adj','tranquilo / silencioso'], ['rail','n','riel / ferrocarril'],
+      ['rating','n','calificación'], ['ridiculous','adj','ridículo/a'], ['road','n','camino / carretera'],
+      ['round-trip ticket','n','boleto redondo'], ['safe','adj','seguro/a'], ['sea','n','mar'], ['security','n','seguridad'],
+      ['show','v','mostrar'], ['sidewalk','n','banqueta'], ['sightseeing','n','hacer turismo'], ['similar','adj','similar'],
+      ['souvenir','n','recuerdo (souvenir)'], ['straight','adv','derecho (dirección)'], ['suitcase','n','maleta'],
+      ['sun hat','n','sombrero para el sol'], ['system','n','sistema'], ['trip','n','viaje'], ['trusted','adj','de confianza'],
+      ['wait','v','esperar'], ['waste time','v','perder el tiempo'],
+    ]},
+  ]},
+
+  unit7: { label: 'Unit 7', hasExam: true, groups: [
+    { name: 'Food and drink', words: [
+      ['beef','n','carne de res'], ['carrot','n','zanahoria'], ['coconut','n','coco'], ['cow','n','vaca'],
+      ['dairy product','n','producto lácteo'], ['egg','n','huevo'], ['fruit','n','fruta'], ['ketchup','n','catsup'],
+      ['lamb','n','cordero'], ['lemon','n','limón'], ['lettuce','n','lechuga'], ['mango','n','mango'], ['mayonnaise','n','mayonesa'],
+      ['meat','n','carne'], ['melon','n','melón'], ['mustard','n','mostaza'], ['olive oil','n','aceite de oliva'], ['onion','n','cebolla'],
+      ['orange','n','naranja'], ['pepper','n','pimiento'], ['pig','n','cerdo'], ['pineapple','n','piña'], ['pork','n','carne de cerdo'],
+      ['salt','n','sal'], ['spinach','n','espinaca'], ['tomato','n','jitomate'], ['vegetable','n','verdura'], ['vinegar','n','vinagre'],
+      ['watermelon','n','sandía'],
+    ]},
+    { name: 'Other words', words: [
+      ['allergic','adj','alérgico/a'], ['almost','adv','casi'], ['apricot','n','chabacano'], ['banana','n','plátano'],
+      ['beverage','n','bebida'], ['bottled','adj','embotellado/a'], ['broccoli','n','brócoli'], ['cheeseburger','n','hamburguesa con queso'],
+      ['chocolate chip','n','chispa de chocolate'], ['cookie','n','galleta'], ['(not) crazy about','phr','(no) le encanta'],
+      ['cream','n','crema'], ['cut','v','cortar'], ['dessert','n','postre'], ['diet','n','dieta'], ['fasting','n','ayuno'],
+      ['fat','n','grasa'], ['fizzy','adj','con gas (bebida)'], ['fruit salad','n','ensalada de fruta'], ['fry','v','freír'],
+      ['hatch','v','eclosionar'], ['healthy','adj','saludable'], ['hot dog','n','hot dog'], ['jelly','n','mermelada / gelatina'],
+      ['lunchbox','n','lonchera'], ['maggot','n','larva / gusano'], ['main course','n','plato principal'], ['meal','n','comida'],
+      ['menu','n','menú'], ['moose','n','alce'], ['mushroom','n','hongo'], ['peppers (veg)','n','pimientos'], ['piece','n','pedazo'],
+      ['potato','n','papa'], ['rice','n','arroz'], ['sauce','n','salsa'], ['savory','adj','salado / sabroso'], ['seaweed','n','alga marina'],
+      ['serving','n','porción'], ['side','n','guarnición'], ['slice','n','rebanada'], ['smoothie','n','licuado'], ['soup','n','sopa'],
+      ['sour','adj','agrio/a'], ['soy sauce','n','salsa de soya'], ['spicy','adj','picante'], ['sugar','n','azúcar'], ['sweet','adj','dulce'],
+      ['thirsty','adj','con sed'], ['yogurt','n','yogur'],
+    ]},
+  ]},
+
+  unit8: { label: 'Unit 8', hasExam: true, groups: [
+    { name: 'Feelings and emotions', words: [
+      ['angry','adj','enojado/a'], ['bored','adj','aburrido/a'], ['excited','adj','emocionado/a'], ['happy','adj','feliz'],
+      ['nervous','adj','nervioso/a'], ['sad','adj','triste'], ['scared','adj','asustado/a'], ['surprised','adj','sorprendido/a'],
+      ['tired','adj','cansado/a'], ['worried','adj','preocupado/a'],
+    ]},
+    { name: 'Other words', words: [
+      ['about','adv','aproximadamente'], ['(… kilometers) away','adv','a (…kilómetros) de distancia'], ['better','adj','mejor'],
+      ['cheesecake','n','pastel de queso'], ['counselor','n','consejero/a'], ['cry','v','llorar'], ['ecosystem','n','ecosistema'],
+      ['feel','v','sentir'], ['flight','n','vuelo'], ['heavy','adj','pesado/a'], ['horrible','adj','horrible'],
+      ['keep fit','phr','mantenerse en forma'], ['life / lives','n','vida / vidas'], ['match','v','hacer juego / combinar'],
+      ['melt','v','derretir'], ['packing list','n','lista de empaque'], ['part','n','parte'], ['protect','v','proteger'],
+      ['regular','adj','regular'], ['smartphone','n','teléfono inteligente'], ['smoke','n','humo'], ['stressful','adj','estresante'],
+      ['take out','v','sacar'], ['talented','adj','talentoso/a'], ['whipped cream','n','crema batida'], ['wildlife','n','vida silvestre'],
+      ['worst','adj','el/la peor'],
+    ]},
+  ]},
+ },
+};
+const VOCAB_UNIT_ORDER = ['welcome','unit1','unit2','unit3','unit4','unit5','unit6','unit7','unit8'];
+const POS_LABELS = {
+  n: 'sustantivo', v: 'verbo', adj: 'adjetivo', adv: 'adverbio', prep: 'preposición',
+  num: 'número', phr: 'frase', det: 'determinante', prefix: 'prefijo',
+};
+const POS_EXPLAIN = {
+  n: 'Nombra a una persona, lugar, animal, cosa o idea.',
+  v: 'Expresa una acción o un estado.',
+  adj: 'Describe o califica a un sustantivo.',
+  adv: 'Modifica a un verbo, adjetivo u oración (cómo, cuándo, dónde).',
+  prep: 'Indica relación de lugar, tiempo o modo entre palabras.',
+  num: 'Indica cantidad u orden.',
+  phr: 'Expresión de varias palabras con un significado conjunto.',
+  det: 'Acompaña al sustantivo para precisar su cantidad o identidad.',
+  prefix: 'Se une al inicio de otra palabra para formar una nueva.',
+};
+let vocabLevel = 'primero';
+function currentVocab(){ return VOCAB_LEVELS[vocabLevel]; }
+
+/* ============ PRACTICE STATE ============ */
+let currentEra = 'presente';
+let currentTenseKey = null;
+let qIndex = 0;
+let score = 0;
+let answered = false;
+let shuffledQuestions = [];
+
+/* ============ EXAM STATE ============ */
+let examDifficulty = 'facil';
+let examQuestions = [];
+let examIndex = 0;
+let examScore = 0;
+let examAnswered = false;
+let examTimer = null;
+let examTimeLeft = 0;
+let examTimePerQ = 25;
+let examBreakdown = {}; // { tenseKey: {correct, total} }
+let examStudentName = '';
+
+/* ============ HELPERS ============ */
+function escapeAttr(s){ return s.replace(/'/g, "\\'"); }
+
+function hideAllViews(){
+  document.getElementById('home').style.display = 'none';
+  document.getElementById('moduleView').classList.remove('active');
+  document.getElementById('explanationView').classList.remove('active');
+  document.getElementById('vocabListView').classList.remove('active');
+  document.getElementById('vocabExamView').classList.remove('active');
+  document.getElementById('vocabExamResultsView').classList.remove('active');
+  document.getElementById('examSetupView').classList.remove('active');
+  document.getElementById('examView').classList.remove('active');
+  document.getElementById('examResultsView').classList.remove('active');
+  if(vocabExamTimer){ clearInterval(vocabExamTimer); vocabExamTimer=null; }
+}
+
+/* ============ ERA SWITCH (practice) ============ */
+function setEra(era){
+  currentEra = era;
+  const colors = ERA_COLORS[era];
+  const root = document.documentElement.style;
+  root.setProperty('--era', colors.c);
+  root.setProperty('--era-glow', colors.glow);
+  root.setProperty('--era-dim', colors.dim);
+
+  document.querySelectorAll('.era-btn').forEach(b=>{
+    b.classList.toggle('active', b.dataset.era === era);
+  });
+  document.getElementById('dialHighlight').style.transform = `translateX(${ERA_INDEX[era]*100}%)`;
+
+  renderTenseGrid();
+}
+
+let topTab = 'gramatica';
+
+function setTopTab(tab){
+  topTab = tab;
+  document.getElementById('topTabGramatica').classList.toggle('active', tab==='gramatica');
+  document.getElementById('topTabVocabulario').classList.toggle('active', tab==='vocabulario');
+  document.getElementById('grammarHome').style.display = tab==='gramatica' ? 'block' : 'none';
+  document.getElementById('vocabHome').style.display = tab==='vocabulario' ? 'block' : 'none';
+  if(tab==='vocabulario') renderVocabGrid();
+}
+
+function goHome(){
+  if(examTimer) clearInterval(examTimer);
+  if(vocabExamTimer) clearInterval(vocabExamTimer);
+  hideAllViews();
+  document.getElementById('home').style.display = 'block';
+  document.getElementById('grammarHome').style.display = topTab==='gramatica' ? 'block' : 'none';
+  document.getElementById('vocabHome').style.display = topTab==='vocabulario' ? 'block' : 'none';
+}
+
+function renderTenseGrid(){
+  const grid = document.getElementById('tenseGrid');
+  grid.innerHTML = '';
+  Object.entries(TENSES).filter(([k,t])=>t.era===currentEra).forEach(([key, t])=>{
+    const card = document.createElement('div');
+    card.className = 'tense-card';
+    card.innerHTML = `
+      <div class="progress-dot ${t._done ? 'done' : ''}"></div>
+      <div class="tag">${t.tag}</div>
+      <h3>${t.title}</h3>
+      <p>${t.summary}</p>
+      <div class="card-actions">
+        <button class="btn-secondary">Explicación</button>
+        <button class="btn-primary">Examen</button>
+      </div>
+    `;
+    card.querySelector('.btn-secondary').onclick = ()=> openExplanation(key);
+    card.querySelector('.btn-primary').onclick = ()=> openModule(key);
+    grid.appendChild(card);
+  });
+}
+
+/* ============ MODULE (practice) ============ */
+function openModule(key){
+  currentTenseKey = key;
+  const t = TENSES[key];
+  setEra(t.era);
+
+  hideAllViews();
+  document.getElementById('moduleView').classList.add('active');
+  document.getElementById('consoleView').style.display = 'block';
+  document.getElementById('summaryView').style.display = 'none';
+
+  document.getElementById('briefTag').textContent = t.tag;
+  document.getElementById('briefTitle').textContent = t.title;
+  document.getElementById('ruleBody').innerHTML = t.rule;
+  document.getElementById('ruleBody').classList.remove('show');
+
+  shuffledQuestions = [...t.questions].sort(()=>Math.random()-0.5);
+  qIndex = 0;
+  score = 0;
+  renderQuestion();
+}
+
+function toggleRule(){
+  document.getElementById('ruleBody').classList.toggle('show');
+}
+
+/* ============ EXPLANATION TAB ============ */
+let currentGuideKey = null;
+
+function openExplanation(key){
+  currentGuideKey = key;
+  const t = TENSES[key];
+  const g = GUIDES[key];
+  setEra(t.era);
+
+  hideAllViews();
+  document.getElementById('explanationView').classList.add('active');
+
+  document.getElementById('guideTag').textContent = t.tag;
+  document.getElementById('guideTitle').textContent = t.title;
+  document.getElementById('guideEsName').textContent = g.esName;
+
+  document.getElementById('guideStructure').innerHTML = g.structure.map(s => `
+    <div class="structure-block">
+      <div class="s-label">${s.label}</div>
+      <div class="s-formula">${s.formula}</div>
+      ${s.note ? `<p class="s-note">${s.note}</p>` : ''}
+      ${s.example ? `
+        <div class="s-example">
+          <div class="en">${s.example.en}</div>
+          <div class="es">${s.example.es}</div>
+        </div>` : ''}
+    </div>
+  `).join('');
+
+  const modalsSection = document.getElementById('guideModalsSection');
+  if(g.modalsTable){
+    modalsSection.style.display = 'block';
+    document.getElementById('guideModalsBody').innerHTML = g.modalsTable.map(m => `
+      <tr>
+        <td class="modal-name">${m.modal}</td>
+        <td>${m.use}</td>
+        <td><div class="m-en">${m.en}</div><div class="m-es">${m.es}</div></td>
+      </tr>
+    `).join('');
+  } else {
+    modalsSection.style.display = 'none';
+  }
+
+  document.getElementById('guideExamples').innerHTML = g.examples.map(ex => `
+    <div class="example-pair">
+      <div class="en">${ex.en}</div>
+      <div class="es">${ex.es}</div>
+    </div>
+  `).join('');
+
+  document.getElementById('guideSignals').innerHTML = g.signals.map(s => `
+    <span class="signal-chip">${s}</span>
+  `).join('');
+}
+
+function openModuleFromGuide(){
+  openModule(currentGuideKey);
+}
+
+/* ============ VOCAB TAB ============ */
+function speakWord(text){
+  if(!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = 'en-US';
+  utter.rate = 0.9;
+  window.speechSynthesis.speak(utter);
+}
+
+function setVocabLevel(level){
+  vocabLevel = level;
+  document.getElementById('levelPrimero').classList.toggle('active', level==='primero');
+  document.getElementById('levelSegundo').classList.toggle('active', level==='segundo');
+  renderVocabGrid();
+}
+
+function unitWordCount(unitKey){
+  return currentVocab()[unitKey].groups.reduce((sum, g) => sum + g.words.length, 0);
+}
+
+function renderVocabGrid(){
+  const grid = document.getElementById('vocabGrid');
+  grid.innerHTML = '';
+  VOCAB_UNIT_ORDER.forEach(key=>{
+    const u = currentVocab()[key];
+    const card = document.createElement('div');
+    card.className = 'vocab-card';
+    card.innerHTML = `
+      <div class="tag">${unitWordCount(key)} palabras</div>
+      <h3>${u.label}</h3>
+      <p>${u.groups.map(g=>g.name).join(' · ')}</p>
+      <div class="card-actions">
+        <button class="btn-secondary">Ver palabras</button>
+        ${u.hasExam ? '<button class="btn-primary">Examen</button>' : ''}
+      </div>
+    `;
+    card.querySelector('.btn-secondary').onclick = ()=> openVocabList(key);
+    const examBtn = card.querySelector('.btn-primary');
+    if(examBtn) examBtn.onclick = ()=> startVocabExam(key);
+    grid.appendChild(card);
+  });
+}
+
+function openVocabList(key){
+  const u = currentVocab()[key];
+  hideAllViews();
+  document.getElementById('vocabListView').classList.add('active');
+  document.getElementById('vocabListTag').textContent = `Vocabulario · ${unitWordCount(key)} palabras`;
+  document.getElementById('vocabListTitle').textContent = u.label;
+
+  const usedPos = new Set();
+  u.groups.forEach(g => g.words.forEach(([,pos]) => usedPos.add(pos)));
+  const legendHtml = [...usedPos].map(pos => `
+    <div class="structure-row" style="grid-template-columns:130px 1fr;">
+      <div class="s-label">${POS_LABELS[pos] || pos}</div>
+      <div style="font-size:13px; color:var(--text-dim);">${POS_EXPLAIN[pos] || ''}</div>
+    </div>
+  `).join('');
+  document.getElementById('vocabListLegendBody').innerHTML = legendHtml;
+
+  const body = document.getElementById('vocabListBody');
+  body.innerHTML = '';
+  u.groups.forEach(g=>{
+    const h = document.createElement('div');
+    h.className = 'word-group-title';
+    h.textContent = g.name;
+    body.appendChild(h);
+    g.words.forEach(([en, pos, es])=>{
+      const row = document.createElement('div');
+      row.className = 'word-row';
+      row.innerHTML = `
+        <button class="speak-btn" aria-label="Escuchar pronunciación">🔊</button>
+        <div class="word-info">
+          <span class="en-word">${en}</span><span class="pos-tag">${POS_LABELS[pos] || pos}</span>
+          <div class="es-word">${es}</div>
+        </div>
+      `;
+      row.querySelector('.speak-btn').onclick = ()=> speakWord(en);
+      body.appendChild(row);
+    });
+  });
+}
+
+function toggleVocabLegend(){
+  document.getElementById('vocabListLegend').classList.toggle('show');
+}
+
+/* ============ VOCAB EXAM STATE ============ */
+let vocabExamUnitKey = null;
+let vocabExamQuestions = [];
+let vocabExamIndex = 0;
+let vocabExamScore = 0;
+let vocabExamAnswered = false;
+let vocabExamTimer = null;
+let vocabExamBreakdown = {};
+
+function flattenUnitWords(key){
+  let all = [];
+  currentVocab()[key].groups.forEach(g=>{
+    g.words.forEach(([en,pos,es])=> all.push({en, pos, es, unitKey:key, unitLabel: currentVocab()[key].label}));
+  });
+  return all;
+}
+
+function flattenAllWords(){
+  let all = [];
+  VOCAB_UNIT_ORDER.forEach(key=> all.push(...flattenUnitWords(key)));
+  return all;
+}
+
+function buildVocabExamPool(key, count){
+  const words = key === 'ALL' ? flattenAllWords() : flattenUnitWords(key);
+  const shuffled = [...words].sort(()=>Math.random()-0.5).slice(0, Math.min(count, words.length));
+  return shuffled.map(w=>{
+    const direction = Math.random() < 0.5 ? 'en2es' : 'es2en';
+    const distractorPool = words.filter(x => x.en !== w.en);
+    const distractors = [...distractorPool].sort(()=>Math.random()-0.5).slice(0,3);
+    let prompt, correctText, optionTexts;
+    if(direction === 'en2es'){
+      prompt = w.en;
+      correctText = w.es;
+      optionTexts = [w.es, ...distractors.map(d=>d.es)];
+    } else {
+      prompt = w.es;
+      correctText = w.en;
+      optionTexts = [w.en, ...distractors.map(d=>d.en)];
+    }
+    optionTexts = optionTexts.sort(()=>Math.random()-0.5);
+    return { direction, promptText: prompt, en: w.en, answer: correctText, options: optionTexts, unitKey: w.unitKey, unitLabel: w.unitLabel };
+  });
+}
+
+function startVocabExam(key){
+  vocabExamUnitKey = key;
+  vocabExamQuestions = buildVocabExamPool(key, 15);
+  vocabExamIndex = 0;
+  vocabExamScore = 0;
+  vocabExamBreakdown = {};
+  hideAllViews();
+  document.getElementById('vocabExamView').classList.add('active');
+  renderVocabExamQuestion();
+}
+
+function startVocabExamAll(){
+  vocabExamUnitKey = 'ALL';
+  vocabExamQuestions = buildVocabExamPool('ALL', 30);
+  vocabExamIndex = 0;
+  vocabExamScore = 0;
+  vocabExamBreakdown = {};
+  hideAllViews();
+  document.getElementById('vocabExamView').classList.add('active');
+  renderVocabExamQuestion();
+}
+
+function retryVocabExam(){
+  if(vocabExamUnitKey === 'ALL') startVocabExamAll();
+  else startVocabExam(vocabExamUnitKey);
+}
+
+function confirmExitVocabExam(){
+  if(confirm('¿Seguro que quieres salir? Perderás tu progreso en este examen.')){
+    goHome();
+  }
+}
+
+function updateVocabExamGauge(){
+  const total = vocabExamQuestions.length;
+  document.getElementById('vocabExamGaugeLabel').textContent = `${Math.min(vocabExamIndex+1,total)} / ${total}`;
+  document.getElementById('vocabExamScoreLabel').textContent = `✓ ${vocabExamScore}`;
+  document.getElementById('vocabExamGaugeFill').style.width = `${(vocabExamIndex/total)*100}%`;
+}
+
+function renderVocabExamQuestion(){
+  vocabExamAnswered = false;
+  updateVocabExamGauge();
+  const total = vocabExamQuestions.length;
+
+  if(vocabExamIndex >= total){
+    showVocabExamResults();
+    return;
+  }
+
+  const q = vocabExamQuestions[vocabExamIndex];
+  const box = document.getElementById('vocabExamConsoleView');
+  const instruction = q.direction === 'en2es'
+    ? '¿Qué significa esta palabra?'
+    : '¿Cuál es la palabra en inglés?';
+  const headerLabel = vocabExamUnitKey === 'ALL' ? q.unitLabel : currentVocab()[vocabExamUnitKey].label;
+
+  box.innerHTML = `
+    <div class="q-index">${headerLabel} — pregunta ${vocabExamIndex+1} de ${total}</div>
+    <div class="q-prompt" style="display:flex; align-items:center; gap:12px;">
+      <button class="speak-btn" id="vocabExamSpeakBtn" aria-label="Escuchar pronunciación">🔊</button>
+      <span>${q.promptText}</span>
+    </div>
+    <p style="color:var(--text-dim); font-size:13px; margin:-10px 0 16px;">${instruction}</p>
+    <div class="options" id="vocabExamOptions"></div>
+    <div class="feedback" id="vocabExamFeedback"></div>
+    <div class="console-footer"><button class="next-btn" id="vocabExamNextBtn" onclick="nextVocabQuestion()">Siguiente →</button></div>
+  `;
+
+  document.getElementById('vocabExamSpeakBtn').onclick = ()=> speakWord(q.en);
+
+  const optWrap = document.getElementById('vocabExamOptions');
+  q.options.forEach(opt=>{
+    const btn = document.createElement('button');
+    btn.className = 'opt-btn';
+    btn.textContent = opt;
+    btn.onclick = ()=> checkVocabAnswer(btn, opt, q);
+    optWrap.appendChild(btn);
+  });
+}
+
+function checkVocabAnswer(btn, chosen, q){
+  if(vocabExamAnswered) return;
+  vocabExamAnswered = true;
+  const buttons = document.querySelectorAll('#vocabExamOptions .opt-btn');
+  buttons.forEach(b=>{
+    b.disabled = true;
+    if(b.textContent === q.answer) b.classList.add('correct');
+  });
+  const isCorrect = chosen === q.answer;
+  if(!isCorrect) btn.classList.add('incorrect');
+  else vocabExamScore++;
+
+  if(!vocabExamBreakdown[q.unitKey]) vocabExamBreakdown[q.unitKey] = {correct:0, total:0, label:q.unitLabel};
+  vocabExamBreakdown[q.unitKey].total++;
+  if(isCorrect) vocabExamBreakdown[q.unitKey].correct++;
+
+  const fb = document.getElementById('vocabExamFeedback');
+  fb.classList.add('show', isCorrect ? 'ok' : 'bad');
+  const explainLine = q.direction === 'en2es'
+    ? `"${q.en}" significa "${q.answer}".`
+    : `"${q.promptText}" se dice "${q.answer}" en inglés.`;
+  fb.innerHTML = isCorrect
+    ? `<b>¡Correcto!</b> ${explainLine}`
+    : `<b>Casi.</b> Respuesta correcta: <b>${q.answer}</b>. ${explainLine}`;
+  document.getElementById('vocabExamNextBtn').classList.add('show');
+}
+
+function nextVocabQuestion(){
+  vocabExamIndex++;
+  renderVocabExamQuestion();
+}
+
+function showVocabExamResults(){
+  hideAllViews();
+  document.getElementById('vocabExamResultsView').classList.add('active');
+  const total = vocabExamQuestions.length;
+  document.getElementById('vocabExamFinalScore').textContent = `${vocabExamScore}/${total}`;
+
+  let msg = '';
+  const pct = vocabExamScore/total;
+  const unitLabel = vocabExamUnitKey === 'ALL' ? 'todo el vocabulario' : currentVocab()[vocabExamUnitKey].label;
+  if(pct === 1) msg = `¡Perfecto! Dominas ${unitLabel}.`;
+  else if(pct >= 0.75) msg = `Muy bien en ${unitLabel}. Repasa las palabras que fallaste.`;
+  else if(pct >= 0.5) msg = `Buen intento en ${unitLabel}. Vuelve a revisar la lista de palabras.`;
+  else msg = `Sigue practicando ${unitLabel}.`;
+  document.getElementById('vocabExamFinalMsg').textContent = msg;
+
+  const wrap = document.getElementById('vocabBreakdownWrap');
+  const body = document.getElementById('vocabBreakdownBody');
+  if(vocabExamUnitKey === 'ALL'){
+    wrap.style.display = 'block';
+    body.innerHTML = VOCAB_UNIT_ORDER.filter(k=>vocabExamBreakdown[k]).map(k=>{
+      const b = vocabExamBreakdown[k];
+      return `<tr><td>${b.label}</td><td class="score-cell">${b.correct}/${b.total}</td></tr>`;
+    }).join('');
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
+function retryModule(){
+  openModule(currentTenseKey);
+}
+
+function updateGauge(){
+  const total = shuffledQuestions.length;
+  document.getElementById('gaugeLabel').textContent = `${Math.min(qIndex+1,total)} / ${total}`;
+  document.getElementById('scoreLabel').textContent = `✓ ${score}`;
+  document.getElementById('gaugeFill').style.width = `${(qIndex/total)*100}%`;
+}
+
+function renderQuestion(){
+  answered = false;
+  updateGauge();
+  const total = shuffledQuestions.length;
+
+  if(qIndex >= total){
+    showSummary();
+    return;
+  }
+
+  const q = shuffledQuestions[qIndex];
+  const box = document.getElementById('consoleView');
+
+  let optionsHtml = '';
+  if(q.type === 'mc'){
+    optionsHtml = `<div class="options">` +
+      q.options.map(opt => `<button class="opt-btn" onclick="checkAnswer(this, '${escapeAttr(opt)}')">${opt}</button>`).join('') +
+      `</div>`;
+  } else {
+    optionsHtml = `
+      <div class="fill-row">
+        <input type="text" id="fillInput" placeholder="Escribe tu respuesta..." autocomplete="off">
+        <button onclick="checkFill()">Enviar</button>
+      </div>`;
+  }
+
+  box.innerHTML = `
+    <div class="q-index">Pregunta ${qIndex+1} de ${total}</div>
+    <div class="q-prompt">${q.prompt.replace('___', '<span class="blank">___</span>')}</div>
+    ${optionsHtml}
+    <div class="feedback" id="feedback"></div>
+    <div class="console-footer"><button class="next-btn" id="nextBtn" onclick="nextQuestion()">Siguiente →</button></div>
+  `;
+
+  if(q.type === 'fill'){
+    const input = document.getElementById('fillInput');
+    input.focus();
+    input.addEventListener('keydown', e=>{ if(e.key==='Enter') checkFill(); });
+  }
+}
+
+function checkAnswer(btn, chosen){
+  if(answered) return;
+  answered = true;
+  const q = shuffledQuestions[qIndex];
+  const buttons = document.querySelectorAll('#consoleView .opt-btn');
+  buttons.forEach(b=>{
+    b.disabled = true;
+    if(b.textContent === q.answer) b.classList.add('correct');
+  });
+  const isCorrect = chosen === q.answer;
+  if(!isCorrect) btn.classList.add('incorrect');
+  else score++;
+
+  showFeedback('feedback', 'nextBtn', isCorrect, q.explain);
+}
+
+function checkFill(){
+  if(answered) return;
+  const input = document.getElementById('fillInput');
+  const q = shuffledQuestions[qIndex];
+  const val = input.value.trim().toLowerCase().replace(/\s+/g,' ');
+  const correct = q.answer.toLowerCase().replace(/\s+/g,' ');
+  const isCorrect = val === correct;
+  answered = true;
+  input.disabled = true;
+  document.querySelector('#consoleView .fill-row button').disabled = true;
+  if(isCorrect) score++;
+  showFeedback('feedback', 'nextBtn', isCorrect, q.explain, q.answer);
+}
+
+function showFeedback(fbId, nextBtnId, isCorrect, explain, correctAnswer){
+  const fb = document.getElementById(fbId);
+  fb.classList.add('show');
+  fb.classList.add(isCorrect ? 'ok' : 'bad');
+  fb.innerHTML = isCorrect
+    ? `<b>¡Correcto!</b> ${explain}`
+    : `<b>Casi.</b> Respuesta correcta: <b>${correctAnswer || ''}</b>. ${explain}`;
+  document.getElementById(nextBtnId).classList.add('show');
+}
+
+function nextQuestion(){
+  qIndex++;
+  renderQuestion();
+}
+
+function showSummary(){
+  document.getElementById('consoleView').style.display = 'none';
+  document.getElementById('summaryView').style.display = 'block';
+  const total = shuffledQuestions.length;
+  document.getElementById('finalScore').textContent = `${score}/${total}`;
+  updateGauge();
+  document.getElementById('gaugeFill').style.width = '100%';
+
+  let msg = '';
+  const pct = score/total;
+  if(pct === 1) msg = '¡Dominado por completo! Este tiempo verbal ya es tuyo.';
+  else if(pct >= 0.75) msg = 'Muy bien. Solo repasa los detalles que fallaste.';
+  else if(pct >= 0.5) msg = 'Vas por buen camino. Revisa la regla y vuelve a intentar.';
+  else msg = 'Este tiempo necesita más práctica. Revisa la regla arriba y vuelve a intentar.';
+  document.getElementById('finalMsg').textContent = msg;
+
+  if(pct >= 0.7) TENSES[currentTenseKey]._done = true;
+}
+
+/* ============ EXAM ============ */
+function openExamSetup(){
+  hideAllViews();
+  document.getElementById('examSetupView').classList.add('active');
+}
+
+function selectDifficulty(level){
+  examDifficulty = level;
+  document.getElementById('diffFacil').classList.toggle('selected', level==='facil');
+  document.getElementById('diffDificil').classList.toggle('selected', level==='dificil');
+}
+
+function buildExamPool(){
+  let pool = [];
+  EXAM_TENSE_ORDER.forEach(key=>{
+    const t = TENSES[key];
+    t.questions.forEach(q=>{
+      pool.push({...q, tenseKey: key, tenseTitle: t.title});
+    });
+  });
+  if(examDifficulty === 'facil'){
+    pool = pool.filter(q => q.type === 'mc');
+  }
+  pool.sort(()=>Math.random()-0.5);
+  const count = examDifficulty === 'facil' ? 12 : 18;
+  return pool.slice(0, count);
+}
+
+function startExam(){
+  examStudentName = document.getElementById('studentName').value.trim() || 'Alumno sin nombre';
+  examQuestions = buildExamPool();
+  examIndex = 0;
+  examScore = 0;
+  examBreakdown = {};
+  examTimePerQ = examDifficulty === 'facil' ? 25 : 15;
+
+  hideAllViews();
+  document.getElementById('examView').classList.add('active');
+  renderExamQuestion();
+}
+
+function confirmExitExam(){
+  if(confirm('¿Seguro que quieres salir? Perderás tu progreso en este examen.')){
+    if(examTimer) clearInterval(examTimer);
+    goHome();
+  }
+}
+
+function updateExamGauge(){
+  const total = examQuestions.length;
+  document.getElementById('examGaugeLabel').textContent = `${Math.min(examIndex+1,total)} / ${total}`;
+  document.getElementById('examScoreLabel').textContent = `✓ ${examScore}`;
+  document.getElementById('examGaugeFill').style.width = `${(examIndex/total)*100}%`;
+}
+
+function renderExamQuestion(){
+  examAnswered = false;
+  updateExamGauge();
+  const total = examQuestions.length;
+
+  if(examIndex >= total){
+    showExamResults();
+    return;
+  }
+
+  const q = examQuestions[examIndex];
+  const box = document.getElementById('examConsoleView');
+
+  let optionsHtml = '';
+  if(q.type === 'mc'){
+    optionsHtml = `<div class="options">` +
+      q.options.map(opt => `<button class="opt-btn" onclick="checkExamAnswer(this, '${escapeAttr(opt)}')">${opt}</button>`).join('') +
+      `</div>`;
+  } else {
+    optionsHtml = `
+      <div class="fill-row">
+        <input type="text" id="examFillInput" placeholder="Escribe tu respuesta..." autocomplete="off">
+        <button onclick="checkExamFill()">Enviar</button>
+      </div>`;
+  }
+
+  box.innerHTML = `
+    <div class="q-index">${q.tenseTitle} — pregunta ${examIndex+1} de ${total}</div>
+    <div class="q-prompt">${q.prompt.replace('___', '<span class="blank">___</span>')}</div>
+    ${optionsHtml}
+    <div class="feedback" id="examFeedback"></div>
+    <div class="console-footer"><button class="next-btn" id="examNextBtn" onclick="nextExamQuestion()">Siguiente →</button></div>
+  `;
+
+  if(q.type === 'fill'){
+    const input = document.getElementById('examFillInput');
+    input.focus();
+    input.addEventListener('keydown', e=>{ if(e.key==='Enter') checkExamFill(); });
+  }
+
+  startExamTimer();
+}
+
+function startExamTimer(){
+  if(examTimer) clearInterval(examTimer);
+  examTimeLeft = examTimePerQ;
+  updateTimerDisplay();
+  examTimer = setInterval(()=>{
+    examTimeLeft--;
+    updateTimerDisplay();
+    if(examTimeLeft <= 0){
+      clearInterval(examTimer);
+      if(!examAnswered) timeUpExam();
+    }
+  }, 1000);
+}
+
+function updateTimerDisplay(){
+  const fill = document.getElementById('timerFill');
+  const label = document.getElementById('timerLabel');
+  const pct = Math.max(0, (examTimeLeft/examTimePerQ)*100);
+  fill.style.width = pct + '%';
+  label.textContent = examTimeLeft + 's';
+  fill.style.background = examTimeLeft <= 5 ? 'var(--bad)' : 'var(--exam)';
+}
+
+function timeUpExam(){
+  examAnswered = true;
+  const q = examQuestions[examIndex];
+  recordBreakdown(q.tenseKey, false);
+  if(q.type === 'mc'){
+    document.querySelectorAll('#examConsoleView .opt-btn').forEach(b=>{
+      b.disabled = true;
+      if(b.textContent === q.answer) b.classList.add('correct');
+    });
+  } else {
+    const input = document.getElementById('examFillInput');
+    if(input) input.disabled = true;
+    const btn = document.querySelector('#examConsoleView .fill-row button');
+    if(btn) btn.disabled = true;
+  }
+  showFeedback('examFeedback', 'examNextBtn', false, "Se acabó el tiempo. " + q.explain, q.answer);
+}
+
+function recordBreakdown(tenseKey, isCorrect){
+  if(!examBreakdown[tenseKey]) examBreakdown[tenseKey] = {correct:0, total:0};
+  examBreakdown[tenseKey].total++;
+  if(isCorrect) examBreakdown[tenseKey].correct++;
+}
+
+function checkExamAnswer(btn, chosen){
+  if(examAnswered) return;
+  examAnswered = true;
+  if(examTimer) clearInterval(examTimer);
+  const q = examQuestions[examIndex];
+  const buttons = document.querySelectorAll('#examConsoleView .opt-btn');
+  buttons.forEach(b=>{
+    b.disabled = true;
+    if(b.textContent === q.answer) b.classList.add('correct');
+  });
+  const isCorrect = chosen === q.answer;
+  if(!isCorrect) btn.classList.add('incorrect');
+  else examScore++;
+  recordBreakdown(q.tenseKey, isCorrect);
+  showFeedback('examFeedback', 'examNextBtn', isCorrect, q.explain);
+}
+
+function checkExamFill(){
+  if(examAnswered) return;
+  const input = document.getElementById('examFillInput');
+  const q = examQuestions[examIndex];
+  const val = input.value.trim().toLowerCase().replace(/\s+/g,' ');
+  const correct = q.answer.toLowerCase().replace(/\s+/g,' ');
+  const isCorrect = val === correct;
+  examAnswered = true;
+  if(examTimer) clearInterval(examTimer);
+  input.disabled = true;
+  document.querySelector('#examConsoleView .fill-row button').disabled = true;
+  if(isCorrect) examScore++;
+  recordBreakdown(q.tenseKey, isCorrect);
+  showFeedback('examFeedback', 'examNextBtn', isCorrect, q.explain, q.answer);
+}
+
+function nextExamQuestion(){
+  examIndex++;
+  renderExamQuestion();
+}
+
+function showExamResults(){
+  if(examTimer) clearInterval(examTimer);
+  hideAllViews();
+  document.getElementById('examResultsView').classList.add('active');
+
+  const total = examQuestions.length;
+  document.getElementById('examFinalScore').textContent = `${examScore}/${total}`;
+
+  let msg = '';
+  const pct = examScore/total;
+  if(pct === 1) msg = `¡Excelente, ${examStudentName}! Dominas los 17 temas de gramática.`;
+  else if(pct >= 0.75) msg = `Muy bien, ${examStudentName}. Revisa el desglose para pulir detalles.`;
+  else if(pct >= 0.5) msg = `Buen intento, ${examStudentName}. Repasa los temas con menos aciertos.`;
+  else msg = `Sigue practicando, ${examStudentName}. Revisa cada tiempo verbal en el panel principal.`;
+  document.getElementById('examFinalMsg').textContent = msg;
+
+  const tbody = document.getElementById('breakdownBody');
+  tbody.innerHTML = '';
+  EXAM_TENSE_ORDER.forEach(key=>{
+    const b = examBreakdown[key];
+    if(!b) return;
+    const row = document.createElement('tr');
+    row.innerHTML = `<td>${TENSES[key].title}</td><td class="score-cell">${b.correct}/${b.total}</td>`;
+    tbody.appendChild(row);
+  });
+}
+
+function downloadResult(){
+  const total = examQuestions.length;
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('es-MX') + ' ' + now.toLocaleTimeString('es-MX');
+
+  let lines = [];
+  lines.push('MÁQUINA DEL TIEMPO GRAMATICAL — RESULTADO DE EXAMEN');
+  lines.push('====================================================');
+  lines.push(`Alumno: ${examStudentName}`);
+  lines.push(`Fecha: ${dateStr}`);
+  lines.push(`Nivel: ${examDifficulty === 'facil' ? 'Fácil' : 'Difícil'}`);
+  lines.push(`Puntaje total: ${examScore}/${total} (${Math.round((examScore/total)*100)}%)`);
+  lines.push('');
+  lines.push('Desglose por tiempo verbal:');
+  EXAM_TENSE_ORDER.forEach(key=>{
+    const b = examBreakdown[key];
+    if(!b) return;
+    lines.push(`- ${TENSES[key].title}: ${b.correct}/${b.total}`);
+  });
+
+  const blob = new Blob([lines.join('\n')], {type: 'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const safeName = examStudentName.replace(/[^a-z0-9]+/gi, '_');
+  a.href = url;
+  a.download = `resultado_${safeName}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* ============ VIRTUAL ASSISTANT ============ */
+let assistantLevel = 'primero';
+let assistantTopicKey = null; // 'FREE' or a unit key
+let assistantStage = 'setup';
+let assistantMessages = []; // {role: 'user'|'assistant', content: string}
+let assistantUsingAI = null; // null = unknown yet, true/false once determined
+let assistantRecognition = null;
+let assistantRecording = false;
+let assistantWordsUsed = new Set();
+let assistantTranscriptLog = []; // {text, confidence}
+let assistantAIWarned = false;
+
+function assistantWordsForUnit(level, key){
+  if(!key || key === 'FREE') return [];
+  let all = [];
+  VOCAB_LEVELS[level][key].groups.forEach(g=>{
+    g.words.forEach(([en]) => all.push(en));
+  });
+  return all;
+}
+
+function setAssistantLevel(level){
+  assistantLevel = level;
+  document.getElementById('assistantLevelPrimero').classList.toggle('active', level==='primero');
+  document.getElementById('assistantLevelSegundo').classList.toggle('active', level==='segundo');
+  assistantTopicKey = null;
+  renderAssistantTopics();
+}
+
+function renderAssistantTopics(){
+  const grid = document.getElementById('assistantTopicGrid');
+  grid.innerHTML = '';
+  const chips = [{key:'FREE', label:'Conversación libre'}]
+    .concat(VOCAB_UNIT_ORDER.map(k => ({key:k, label: VOCAB_LEVELS[assistantLevel][k].label})));
+  chips.forEach(c=>{
+    const btn = document.createElement('button');
+    btn.className = 'topic-chip' + (assistantTopicKey===c.key ? ' selected' : '');
+    btn.textContent = c.label;
+    btn.onclick = ()=>{ assistantTopicKey = c.key; renderAssistantTopics(); };
+    grid.appendChild(btn);
+  });
+}
+
+function openAssistant(){
+  document.getElementById('assistantOverlay').style.display = 'flex';
+  if(assistantStage === 'setup') renderAssistantTopics();
+  showAssistantStage(assistantStage);
+}
+
+function closeAssistant(){
+  document.getElementById('assistantOverlay').style.display = 'none';
+  if(assistantRecording) stopRecording();
+}
+
+function showAssistantStage(stage){
+  assistantStage = stage;
+  document.getElementById('assistantSetup').style.display = stage==='setup' ? 'block' : 'none';
+  document.getElementById('assistantChat').style.display = stage==='chat' ? 'block' : 'none';
+  document.getElementById('assistantReport').style.display = stage==='report' ? 'block' : 'none';
+}
+
+function restartAssistant(){
+  assistantMessages = [];
+  assistantWordsUsed = new Set();
+  assistantTranscriptLog = [];
+  assistantUsingAI = null;
+  assistantAIWarned = false;
+  assistantTopicKey = null;
+  document.getElementById('assistantMessages').innerHTML = '';
+  renderAssistantTopics();
+  showAssistantStage('setup');
+}
+
+async function startAssistantConversation(){
+  if(!assistantTopicKey){ assistantTopicKey = 'FREE'; }
+  assistantMessages = [];
+  assistantWordsUsed = new Set();
+  assistantTranscriptLog = [];
+  document.getElementById('assistantMessages').innerHTML = '';
+
+  const topicLabel = assistantTopicKey === 'FREE' ? 'Conversación libre' : VOCAB_LEVELS[assistantLevel][assistantTopicKey].label;
+  document.getElementById('assistantTopicBanner').textContent = `Tema: ${topicLabel} · ${assistantLevel === 'primero' ? 'primer año' : 'segundo año'}`;
+
+  showAssistantStage('chat');
+
+  // check mic support
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  document.getElementById('assistantMicBtn').style.display = SR ? 'inline-flex' : 'none';
+
+  const greeting = await getAssistantOpening();
+  addAssistantMessage('assistant', greeting);
+}
+
+function assistantSystemPrompt(){
+  const topicLabel = assistantTopicKey === 'FREE' ? null : VOCAB_LEVELS[assistantLevel][assistantTopicKey].label;
+  const words = assistantWordsForUnit(assistantLevel, assistantTopicKey).slice(0, 25).join(', ');
+  let p = `Eres un asistente conversacional para practicar inglés, hablando con un estudiante de preparatoria mexicano de ${assistantLevel === 'primero' ? 'primer' : 'segundo'} año. Responde SIEMPRE en inglés, en oraciones cortas y sencillas apropiadas para ese nivel. Haz una pregunta de seguimiento breve en cada turno para mantener la conversación. Sé cálido y alentador. No corrijas errores dentro de la conversación (eso se hará después, en un reporte aparte); simplemente sigue la conversación con naturalidad.`;
+  if(topicLabel){
+    p += ` El tema de la conversación es "${topicLabel}". Usa cuando sea natural vocabulario relacionado con: ${words}.`;
+  } else {
+    p += ` El estudiante eligió conversación libre: adapta el tema a lo que el estudiante quiera platicar.`;
+  }
+  return p;
+}
+
+async function callClaudeAPI(messages){
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1000,
+      messages: messages,
+    })
+  });
+  if(!response.ok) throw new Error('API error ' + response.status);
+  const data = await response.json();
+  const text = (data.content || []).map(b => b.type==='text' ? b.text : '').join('\n').trim();
+  if(!text) throw new Error('Empty response');
+  return text;
+}
+
+async function getAssistantOpening(){
+  if(assistantUsingAI === false) return localAssistantOpening();
+  try{
+    const reply = await callClaudeAPI([
+      { role:'user', content: assistantSystemPrompt() + '\n\nSaluda al estudiante brevemente en inglés y haz la primera pregunta para comenzar la conversación.' }
+    ]);
+    assistantUsingAI = true;
+    return reply;
+  } catch(e){
+    assistantUsingAI = false;
+    warnLocalMode();
+    return localAssistantOpening();
+  }
+}
+
+function localAssistantOpening(){
+  if(assistantTopicKey === 'FREE'){
+    return "Hi! I'm your English practice partner. What would you like to talk about today?";
+  }
+  const words = assistantWordsForUnit(assistantLevel, assistantTopicKey);
+  const w = words[Math.floor(Math.random()*words.length)] || 'this topic';
+  return `Hi! Let's talk about ${VOCAB_LEVELS[assistantLevel][assistantTopicKey].label.toLowerCase()}. Can you tell me something about "${w}"?`;
+}
+
+function warnLocalMode(){
+  if(assistantAIWarned) return;
+  assistantAIWarned = true;
+  addAssistantMessage('system-note', 'Modo de práctica local activado (no se pudo conectar con el modo de conversación IA en este entorno).');
+}
+
+function addAssistantMessage(role, text){
+  if(role !== 'system-note') assistantMessages.push({role: role==='user' ? 'user' : 'assistant', content: text});
+  const wrap = document.getElementById('assistantMessages');
+  const bubble = document.createElement('div');
+  bubble.className = 'msg ' + role;
+  bubble.textContent = text;
+  wrap.appendChild(bubble);
+  wrap.scrollTop = wrap.scrollHeight;
+  if(role === 'assistant') speakWord(text);
+}
+
+/* ---- speech recognition ---- */
+function toggleRecording(){
+  if(assistantRecording) stopRecording(); else startRecording();
+}
+
+function startRecording(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR) return;
+  assistantRecognition = new SR();
+  assistantRecognition.lang = 'en-US';
+  assistantRecognition.interimResults = false;
+  assistantRecognition.maxAlternatives = 1;
+
+  assistantRecognition.onstart = ()=>{
+    assistantRecording = true;
+    document.getElementById('assistantMicBtn').classList.add('recording');
+    document.getElementById('assistantStatus').textContent = 'Escuchando... habla ahora.';
+  };
+  assistantRecognition.onresult = (event)=>{
+    const result = event.results[0][0];
+    handleUserUtterance(result.transcript, result.confidence || 0);
+  };
+  assistantRecognition.onerror = ()=>{
+    document.getElementById('assistantStatus').textContent = 'No se detectó audio. Intenta de nuevo o escribe tu respuesta.';
+  };
+  assistantRecognition.onend = ()=>{
+    assistantRecording = false;
+    document.getElementById('assistantMicBtn').classList.remove('recording');
+    document.getElementById('assistantStatus').textContent = '';
+  };
+  assistantRecognition.start();
+}
+
+function stopRecording(){
+  if(assistantRecognition) assistantRecognition.stop();
+  assistantRecording = false;
+  document.getElementById('assistantMicBtn').classList.remove('recording');
+}
+
+function sendTypedMessage(){
+  const input = document.getElementById('assistantTextInput');
+  const text = input.value.trim();
+  if(!text) return;
+  input.value = '';
+  handleUserUtterance(text, 0);
+}
+
+async function handleUserUtterance(text, confidence){
+  assistantTranscriptLog.push({text, confidence});
+  markWordsUsed(text);
+  addAssistantMessage('user', text);
+
+  document.getElementById('assistantStatus').textContent = 'El asistente está escribiendo...';
+  const reply = await getAssistantReply();
+  document.getElementById('assistantStatus').textContent = '';
+  addAssistantMessage('assistant', reply);
+}
+
+function markWordsUsed(text){
+  if(assistantTopicKey === 'FREE' || !assistantTopicKey) return;
+  const lower = text.toLowerCase();
+  assistantWordsForUnit(assistantLevel, assistantTopicKey).forEach(w=>{
+    const re = new RegExp('\\b' + w.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '\\b');
+    if(re.test(lower)) assistantWordsUsed.add(w);
+  });
+}
+
+async function getAssistantReply(){
+  if(assistantUsingAI === false) return localAssistantReply();
+  try{
+    const apiMessages = [
+      { role:'user', content: assistantSystemPrompt() },
+      { role:'assistant', content: 'Understood, I will follow those instructions.' },
+      ...assistantMessages
+    ];
+    const reply = await callClaudeAPI(apiMessages);
+    assistantUsingAI = true;
+    return reply;
+  } catch(e){
+    assistantUsingAI = false;
+    warnLocalMode();
+    return localAssistantReply();
+  }
+}
+
+const ASSISTANT_ACKS = ["That's interesting!", "Nice, tell me more.", "Great!", "I see, and why is that?", "Cool!", "Got it."];
+function localAssistantReply(){
+  const ack = ASSISTANT_ACKS[Math.floor(Math.random()*ASSISTANT_ACKS.length)];
+  if(assistantTopicKey === 'FREE' || !assistantTopicKey){
+    return `${ack} What else would you like to tell me?`;
+  }
+  const words = assistantWordsForUnit(assistantLevel, assistantTopicKey);
+  const unused = words.filter(w => !assistantWordsUsed.has(w));
+  const pool = unused.length ? unused : words;
+  const w = pool[Math.floor(Math.random()*pool.length)];
+  return `${ack} What can you tell me about "${w}"?`;
+}
+
+/* ---- report ---- */
+async function finishAssistantConversation(){
+  if(assistantRecording) stopRecording();
+  showAssistantStage('report');
+  document.getElementById('assistantReportBody').innerHTML = '<p class="assistant-hint">Generando tu reporte...</p>';
+
+  if(assistantUsingAI !== false && assistantMessages.some(m=>m.role==='user')){
+    try{
+      const data = await getAIReport();
+      renderAssistantReport(data, true);
+      return;
+    } catch(e){
+      assistantUsingAI = false;
+    }
+  }
+  renderAssistantReport(buildLocalReport(), false);
+}
+
+async function getAIReport(){
+  const transcript = assistantMessages.map(m => (m.role==='user'?'Student: ':'Assistant: ') + m.content).join('\n');
+  const prompt = `Basado en la siguiente conversación en inglés entre un estudiante de preparatoria mexicano y un asistente, genera un reporte en español ÚNICAMENTE en formato JSON válido, sin texto adicional ni backticks, con esta forma exacta:
+{"pronunciation_notes": ["..."], "grammar_errors": [{"error":"...", "suggestion":"..."}], "vocabulary_used": ["..."], "points_to_improve": ["..."], "summary": "..."}
+No tienes audio real, así que para pronunciation_notes comenta de forma general y breve basándote en el texto (o indica que no hay suficiente información). Sé constructivo, breve y específico sobre los errores gramaticales que encuentres en las líneas del estudiante.
+
+Conversación:
+${transcript}`;
+  const raw = await callClaudeAPI([{ role:'user', content: prompt }]);
+  const clean = raw.replace(/```json|```/g, '').trim();
+  return JSON.parse(clean);
+}
+
+function buildLocalReport(){
+  const userLines = assistantMessages.filter(m=>m.role==='user').map(m=>m.content);
+  const fullText = userLines.join(' ');
+
+  // simple grammar heuristics
+  const checks = [
+    {re:/\bi is\b/i, error:'"I is"', suggestion:'Usa "I am".'},
+    {re:/\bi are\b/i, error:'"I are"', suggestion:'Usa "I am".'},
+    {re:/\byou is\b/i, error:'"you is"', suggestion:'Usa "you are".'},
+    {re:/\b(he|she|it) don't\b/i, error:'"he/she/it don\'t"', suggestion:'Usa "doesn\'t" con he/she/it.'},
+    {re:/\ba [aeiou]\w*/i, error:'"a" antes de una palabra que empieza con vocal', suggestion:'Usa "an" antes de sonidos de vocal (an apple).'},
+    {re:/\bmore \w+er\b/i, error:'comparativo doble', suggestion:'No combines "more" con "-er" (di solo "happier" o "more happy").'},
+  ];
+  const grammar_errors = [];
+  checks.forEach(c=>{ if(c.re.test(fullText)) grammar_errors.push({error:c.error, suggestion:c.suggestion}); });
+
+  // vocabulary usage
+  let vocabulary_used = [...assistantWordsUsed];
+  const points_to_improve = [];
+  if(assistantTopicKey && assistantTopicKey !== 'FREE'){
+    const words = assistantWordsForUnit(assistantLevel, assistantTopicKey);
+    if(vocabulary_used.length < Math.min(5, words.length)){
+      points_to_improve.push('Intenta usar más palabras del vocabulario del tema durante la conversación.');
+    }
+  }
+  if(grammar_errors.length) points_to_improve.push('Revisa los errores gramaticales señalados arriba.');
+  if(userLines.length < 3) points_to_improve.push('Practica conversaciones más largas para tener más para revisar.');
+  if(!points_to_improve.length) points_to_improve.push('¡Buen trabajo! Sigue practicando conversaciones más largas y con más vocabulario.');
+
+  const low_confidence = assistantTranscriptLog.filter(t => t.confidence > 0 && t.confidence < 0.6).map(t=>t.text);
+
+  return {
+    pronunciation_notes: low_confidence.length
+      ? low_confidence.map(t => `El reconocimiento de voz tuvo dificultad para entender: "${t}" — practica decirlo despacio y claro.`)
+      : ['Tu navegador no proporcionó datos de confianza de pronunciación en esta sesión. Usa el botón 🔊 de las palabras clave en Vocabulario para comparar tu pronunciación.'],
+    grammar_errors,
+    vocabulary_used,
+    points_to_improve,
+    summary: `Practicaste ${userLines.length} turno(s) de conversación${assistantTopicKey && assistantTopicKey!=='FREE' ? ' sobre ' + VOCAB_LEVELS[assistantLevel][assistantTopicKey].label : ''}. ${grammar_errors.length ? 'Encontramos algunos errores gramaticales para revisar.' : 'No detectamos errores gramaticales evidentes.'}`,
+  };
+}
+
+function renderAssistantReport(data, usedAI){
+  const body = document.getElementById('assistantReportBody');
+  const modeNote = usedAI ? '' : '<p class="assistant-hint">Reporte generado en modo de práctica local (sin conexión al modo IA).</p>';
+  body.innerHTML = `
+    ${modeNote}
+    <div class="report-section">
+      <h4>Resumen</h4>
+      <p>${data.summary || ''}</p>
+    </div>
+    <div class="report-section">
+      <h4>Vocabulario usado</h4>
+      <div class="report-chip-list">${(data.vocabulary_used||[]).length ? data.vocabulary_used.map(w=>`<span class="report-chip">${w}</span>`).join('') : '<p>No se detectaron palabras del vocabulario del tema.</p>'}</div>
+    </div>
+    <div class="report-section">
+      <h4>Errores gramaticales</h4>
+      ${(data.grammar_errors||[]).length ? `<ul>${data.grammar_errors.map(e=>`<li><b>${e.error}</b> — ${e.suggestion}</li>`).join('')}</ul>` : '<p>No se detectaron errores evidentes.</p>'}
+    </div>
+    <div class="report-section">
+      <h4>Pronunciación</h4>
+      <ul>${(data.pronunciation_notes||[]).map(n=>`<li>${n}</li>`).join('')}</ul>
+    </div>
+    <div class="report-section">
+      <h4>Puntos a mejorar</h4>
+      <ul>${(data.points_to_improve||[]).map(p=>`<li>${p}</li>`).join('')}</ul>
+    </div>
+  `;
+}
+
+/* ============ SESSION ============ */
+function initSession(){
+  try{
+    const auth = JSON.parse(localStorage.getItem('mtg_auth') || 'null');
+    if(auth && auth.name){
+      document.getElementById('sessionName').textContent = '👤 ' + auth.name;
+    }
+  }catch(e){}
+}
+
+function logoutSession(){
+  localStorage.removeItem('mtg_auth');
+  window.location.href = 'index.html';
+}
+
+/* ============ INIT ============ */
+setEra('presente');
+initSession();
+</script>
+
+</body>
+</html>
