@@ -1,262 +1,123 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<script>
+/* Si ya hay una sesión válida, entra directo al simulador */
+(function(){
+  try{
+    var auth = JSON.parse(localStorage.getItem('mtg_auth') || 'null');
+    if(auth && auth.user){ window.location.replace('simulador.html'); }
+  }catch(e){}
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Simulador interactivo de gramática y vocabulario en inglés para estudiantes de preparatoria.">
-<meta name="theme-color" content="#0b1220">
-<link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
-<link rel="manifest" href="manifest.webmanifest">
-<title>Máquina del Tiempo Gramatical</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/styles.css">
+<title>Iniciar sesión — Máquina del Tiempo Gramatical</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
+  :root{
+    --bg: #0b1220;
+    --panel: #121b2e;
+    --panel-2: #17233a;
+    --line: rgba(237,239,245,0.10);
+    --text: #edeff5;
+    --text-dim: #9aa5bd;
+    --era: #3fbfad;
+    --bad: #ef6a6a;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{
+    background: var(--bg);
+    color: var(--text);
+    font-family:'Inter', sans-serif;
+    min-height:100vh;
+    display:flex; align-items:center; justify-content:center;
+    padding: 24px;
+  }
+  .login-card{
+    width:100%; max-width: 380px;
+    background: var(--panel);
+    border:1px solid var(--line);
+    border-radius: 16px;
+    padding: 28px 26px;
+  }
+  .eyebrow{
+    font-family:'JetBrains Mono', monospace; font-size:10.5px; letter-spacing:2px;
+    color: var(--text-dim); text-transform:uppercase;
+  }
+  h1{
+    font-family:'Space Grotesk', sans-serif; font-size:22px; font-weight:700;
+    margin: 6px 0 4px;
+  }
+  .login-card > p{ color: var(--text-dim); font-size:13px; margin-bottom:22px; }
+
+  label{
+    display:block; font-family:'JetBrains Mono', monospace; font-size:11px;
+    letter-spacing:1px; text-transform:uppercase; color:var(--text-dim); margin-bottom:6px;
+  }
+  input{
+    width:100%; background: var(--panel-2); border:1px solid var(--line); color:var(--text);
+    padding: 12px 14px; border-radius:10px; font-size:14.5px; font-family:'Inter', sans-serif;
+    margin-bottom:16px;
+  }
+  input:focus{ outline:none; border-color: var(--era); }
+
+  button{
+    width:100%; background: var(--era); border:none; color:#0b1220; font-weight:700;
+    font-family:'Space Grotesk', sans-serif; padding:13px; border-radius:10px; cursor:pointer;
+    font-size:14.5px;
+  }
+  button:hover{ opacity:0.92; }
+
+  .error-msg{
+    display:none; background: rgba(239,106,106,0.12); border:1px solid rgba(239,106,106,0.4);
+    color:#ffd6d6; font-size:12.5px; padding:10px 12px; border-radius:9px; margin-bottom:14px;
+  }
+  .error-msg.show{ display:block; }
+
+  .foot-note{
+    text-align:center; margin-top:18px; font-size:11.5px; color:var(--text-dim);
+  }
+</style>
 </head>
 <body>
 
-<div class="wrap">
-
-  <header>
-    <div class="eyebrow" id="eyebrow">inglés · prepa</div>
+  <form class="login-card" id="loginForm" autocomplete="off">
+    <div class="eyebrow">inglés · prepa</div>
     <h1>Máquina del Tiempo Gramatical</h1>
-    <p>Gramática y vocabulario en un solo lugar: explicaciones claras y un examen para cada tema.</p>
-  </header>
+    <p>Inicia sesión con el usuario y la contraseña que te dio tu profesor(a).</p>
 
-  <!-- HOME -->
-  <div id="home">
+    <div class="error-msg" id="errorMsg">Usuario o contraseña incorrectos.</div>
 
-    <!-- TOP TAB SWITCH -->
-    <div class="top-tab-switch">
-      <button class="top-tab-btn active" id="topTabGramatica" onclick="setTopTab('gramatica')">Gramática</button>
-      <button class="top-tab-btn" id="topTabVocabulario" onclick="setTopTab('vocabulario')">Vocabulario</button>
-    </div>
+    <label for="userInput">Usuario</label>
+    <input type="text" id="userInput" placeholder="ej. alumno01" autocomplete="username">
 
-    <div id="grammarHome">
+    <label for="passInput">Contraseña</label>
+    <input type="password" id="passInput" placeholder="••••••••" autocomplete="current-password">
 
-    <!-- DIAL / ERA SELECTOR -->
-    <div class="dial-panel">
-      <div class="dial-track">
-        <div class="dial-highlight" id="dialHighlight"></div>
-        <button class="era-btn active" data-era="pasado" onclick="setEra('pasado')">Pasado</button>
-        <button class="era-btn" data-era="presente" onclick="setEra('presente')">Presente</button>
-        <button class="era-btn" data-era="futuro" onclick="setEra('futuro')">Futuro</button>
-        <button class="era-btn" data-era="modales" onclick="setEra('modales')">Modales</button>
-        <button class="era-btn" data-era="extra" onclick="setEra('extra')">Extra</button>
-      </div>
-    </div>
+    <button type="submit">Iniciar sesión</button>
 
-    <div class="tense-grid" id="tenseGrid"></div>
+    <div class="foot-note">Tus respuestas y avances se guardan solo en este dispositivo.</div>
+  </form>
 
-    <!-- EXAM CTA -->
-    <div class="exam-cta" onclick="openExamSetup()">
-      <div class="left">
-        <div class="tag">Examen general · contra el reloj</div>
-        <h3>Repaso mezclado de los 17 temas de gramática</h3>
-        <p>Elige tu nivel, escribe tu nombre y descarga tu resultado al terminar.</p>
-      </div>
-      <div class="arrow">→</div>
-    </div>
-    </div>
+<script src="users.js"></script>
+<script>
+document.getElementById('loginForm').addEventListener('submit', function(e){
+  e.preventDefault();
+  const user = document.getElementById('userInput').value.trim().toLowerCase();
+  const pass = document.getElementById('passInput').value;
+  const errorMsg = document.getElementById('errorMsg');
 
-    <!-- VOCAB HOME -->
-    <div id="vocabHome" style="display:none;">
-      <div class="level-switch">
-        <button class="level-btn active" id="levelPrimero" onclick="setVocabLevel('primero')">Primer año</button>
-        <button class="level-btn" id="levelSegundo" onclick="setVocabLevel('segundo')">Segundo año</button>
-      </div>
+  const match = USERS.find(u => u.user.toLowerCase() === user && u.pass === pass);
 
-      <div class="vocab-grid" id="vocabGrid"></div>
-
-      <!-- VOCAB GENERAL EXAM CTA -->
-      <div class="exam-cta" onclick="startVocabExamAll()">
-        <div class="left">
-          <div class="tag" id="vocabExamAllTag">Examen general de vocabulario</div>
-          <h3>Repaso mezclado de todas las unidades</h3>
-          <p>30 preguntas al azar de todo el vocabulario de este año.</p>
-        </div>
-        <div class="arrow">→</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODULE: practice screen -->
-  <div class="module" id="moduleView">
-    <button class="back-btn" onclick="goHome()">← volver al panel</button>
-
-    <div class="briefing">
-      <div class="tag" id="briefTag">TIEMPO VERBAL</div>
-      <h2 id="briefTitle">Título</h2>
-      <button class="rule-toggle" onclick="toggleRule()">Ver la regla</button>
-      <div class="rule-body" id="ruleBody"></div>
-    </div>
-
-    <div class="gauge-row">
-      <span class="gauge-label" id="gaugeLabel">0 / 0</span>
-      <div class="gauge-track"><div class="gauge-fill" id="gaugeFill"></div></div>
-      <span class="gauge-label" id="scoreLabel">✓ 0</span>
-    </div>
-
-    <div class="console" id="consoleView"></div>
-
-    <div class="summary" id="summaryView" style="display:none;">
-      <div class="big-score" id="finalScore">0/0</div>
-      <p id="finalMsg">Resultado</p>
-      <div class="actions">
-        <button class="ghost-btn" onclick="goHome()">Volver al panel</button>
-        <button class="solid-btn" onclick="retryModule()">Reintentar este tiempo</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- EXPLANATION DETAIL -->
-  <div class="module" id="explanationView">
-    <button class="back-btn" onclick="goHome()">← volver al panel</button>
-
-    <div class="guide-header">
-      <div class="tag" id="guideTag">TIEMPO VERBAL</div>
-      <h2 id="guideTitle">Título</h2>
-      <div class="es-name" id="guideEsName">Traducción</div>
-    </div>
-
-    <div class="guide-section">
-      <h3>Estructura</h3>
-      <div id="guideStructure"></div>
-    </div>
-
-    <div class="guide-section">
-      <h3>Ejemplos con traducción</h3>
-      <div id="guideExamples"></div>
-    </div>
-
-    <div class="guide-section" id="guideModalsSection" style="display:none;">
-      <h3>Los 10 verbos modales</h3>
-      <table class="modals-table">
-        <thead><tr><th>Modal</th><th>Uso</th><th>Ejemplo</th></tr></thead>
-        <tbody id="guideModalsBody"></tbody>
-      </table>
-    </div>
-
-    <div class="guide-section">
-      <h3>Palabras clave</h3>
-      <div class="signal-chips" id="guideSignals"></div>
-    </div>
-
-    <div class="guide-cta">
-      <button class="next-btn show" onclick="openModuleFromGuide()">Presentar examen →</button>
-    </div>
-  </div>
-
-  <!-- VOCAB WORD LIST -->
-  <div class="module" id="vocabListView">
-    <button class="back-btn" onclick="goHome()">← volver al vocabulario</button>
-    <div class="guide-header">
-      <div class="tag" id="vocabListTag">UNIDAD</div>
-      <h2 id="vocabListTitle">Título</h2>
-    </div>
-    <div class="briefing" style="margin-bottom:18px;">
-      <button class="rule-toggle" onclick="toggleVocabLegend()">¿Qué significa cada categoría gramatical?</button>
-      <div class="rule-body" id="vocabListLegend"><div id="vocabListLegendBody"></div></div>
-    </div>
-    <div id="vocabListBody"></div>
-  </div>
-
-  <!-- VOCAB EXAM -->
-  <div class="module" id="vocabExamView">
-    <button class="back-btn" onclick="confirmExitVocabExam()">← salir del examen</button>
-    <div class="gauge-row">
-      <span class="gauge-label" id="vocabExamGaugeLabel">0 / 0</span>
-      <div class="gauge-track"><div class="gauge-fill" id="vocabExamGaugeFill" style="background:var(--era)"></div></div>
-      <span class="gauge-label" id="vocabExamScoreLabel">✓ 0</span>
-    </div>
-    <div class="console" id="vocabExamConsoleView"></div>
-  </div>
-
-  <!-- VOCAB EXAM RESULTS -->
-  <div class="module" id="vocabExamResultsView">
-    <div class="summary">
-      <div class="big-score" id="vocabExamFinalScore">0/0</div>
-      <p id="vocabExamFinalMsg">Resultado</p>
-      <div class="breakdown" id="vocabBreakdownWrap" style="display:none;">
-        <table>
-          <thead><tr><th>Unidad</th><th>Aciertos</th></tr></thead>
-          <tbody id="vocabBreakdownBody"></tbody>
-        </table>
-      </div>
-      <div class="actions">
-        <button class="ghost-btn" onclick="goHome()">Volver al vocabulario</button>
-        <button class="solid-btn" onclick="retryVocabExam()">Reintentar examen</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- EXAM SETUP -->
-  <div class="module" id="examSetupView">
-    <button class="back-btn" onclick="goHome()">← volver al panel</button>
-    <div class="setup-panel">
-      <h2>Configura tu examen</h2>
-      <p>Se mezclarán preguntas de los 17 temas de gramática. Al final verás tu puntaje por tema y podrás descargar tu resultado.</p>
-
-      <label class="field-label" for="studentName">Tu nombre</label>
-      <input type="text" id="studentName" class="name-input" placeholder="Escribe tu nombre completo">
-
-      <label class="field-label">Nivel</label>
-      <div class="diff-options">
-        <button class="diff-btn selected" id="diffFacil" onclick="selectDifficulty('facil')">
-          <b>Fácil</b>
-          <span>12 preguntas · solo opción múltiple · 25 seg. cada una</span>
-        </button>
-        <button class="diff-btn" id="diffDificil" onclick="selectDifficulty('dificil')">
-          <b>Difícil</b>
-          <span>18 preguntas · incluye completar espacios · 15 seg. cada una</span>
-        </button>
-      </div>
-
-      <button class="start-exam-btn" onclick="startExam()">Comenzar examen</button>
-    </div>
-  </div>
-
-  <!-- EXAM RUNNING -->
-  <div class="module" id="examView">
-    <button class="back-btn" onclick="confirmExitExam()">← salir del examen</button>
-
-    <div class="gauge-row">
-      <span class="gauge-label" id="examGaugeLabel">0 / 0</span>
-      <div class="gauge-track"><div class="gauge-fill" id="examGaugeFill" style="background:var(--exam)"></div></div>
-      <span class="gauge-label" id="examScoreLabel">✓ 0</span>
-    </div>
-    <div class="timer-row">
-      <span class="timer-label" id="timerLabel">--s</span>
-      <div class="timer-track"><div class="timer-fill" id="timerFill"></div></div>
-    </div>
-
-    <div class="console" id="examConsoleView"></div>
-  </div>
-
-  <!-- EXAM RESULTS -->
-  <div class="module" id="examResultsView">
-    <div class="summary">
-      <div class="big-score" id="examFinalScore" style="color:var(--exam)">0/0</div>
-      <p id="examFinalMsg">Resultado</p>
-      <div class="breakdown">
-        <table>
-          <thead><tr><th>Tiempo verbal</th><th>Aciertos</th></tr></thead>
-          <tbody id="breakdownBody"></tbody>
-        </table>
-      </div>
-      <div class="actions">
-        <button class="ghost-btn" onclick="goHome()">Volver al panel</button>
-        <button class="solid-btn" style="background:var(--exam)" onclick="downloadResult()">Descargar resultado (.txt)</button>
-      </div>
-    </div>
-  </div>
-
-  <footer>simulador de tiempos verbales · práctica sin conexión a servidor</footer>
-</div>
-
-<script src="assets/js/app.js" defer></script>
-
-
+  if(match){
+    localStorage.setItem('mtg_auth', JSON.stringify({ user: match.user, name: match.name, ts: Date.now() }));
+    window.location.href = 'simulador.html';
+  } else {
+    errorMsg.classList.add('show');
+  }
+});
+</script>
 </body>
 </html>
